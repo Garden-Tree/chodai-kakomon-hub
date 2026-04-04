@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// 学部
+model Faculty {
+  id        String    @id @default(uuid())
+  name      String    @unique // 例: 情報データ科学部
+  subjects  Subject[]
+  createdAt DateTime  @default(now())
+}
+
+// 授業（科目）
+model Subject {
+  id        String   @id @default(uuid())
+  name      String   // 例: 線形代数学I
+  faculty   Faculty  @relation(fields: [facultyId], references: [id])
+  facultyId String
+  exams     Exam[]
+  createdAt DateTime @default(now())
+
+  @@unique([name, facultyId]) // 同じ学部内に同名の科目は作らない制約
+}
+
+// 過去問データ
+model Exam {
+  id          String   @id @default(uuid())
+  subject     Subject  @relation(fields: [subjectId], references: [id])
+  subjectId   String
+  year        Int      // 開講年度 (例: 2024)
+  instructor  String   // 担当教員名
+  fileUrl     String   // Supabase Storage上のパス
+  fileName    String?  // 元のファイル名を追加
+  uploadedBy  String   // アップロード者のac.jpメールアドレス
+  createdAt   DateTime @default(now())
+
+  @@index([subjectId, year(sort: Desc)]) // 授業ページでの年度降順ソート用インデックス
+}

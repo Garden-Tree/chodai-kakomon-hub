@@ -16,7 +16,9 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient();
-    const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    // 環境変数 NEXT_PUBLIC_SITE_URL を最優先にすることで、本番環境でも必ず正しいURLを使う
+    // 未設定時のみリクエストの origin ヘッダーにフォールバック（ローカル開発向け）
+    const origin = process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'http://localhost:3000';
 
     const { error } = await supabase.auth.signInWithOtp({
       email,

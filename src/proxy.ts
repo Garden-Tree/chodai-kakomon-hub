@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // 環境変数に設定された簡易パスワード
   const expectedPassword = process.env.SITE_COMMON_PASSWORD || 'your_common_password_here';
   const providedPassword = request.cookies.get('site_common_password')?.value;
@@ -14,7 +14,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 認証・アップロード関連のルートやログイン画面自体はリダイレクトしない
-  const skipPaths = ['/login-common', '/upload', '/login', '/auth/callback', '/auth/confirm'];
+  const skipPaths = ['/login-common', '/upload', '/login', '/auth/confirm'];
   if (skipPaths.some(path => pathname.startsWith(path))) {
     return NextResponse.next();
   }

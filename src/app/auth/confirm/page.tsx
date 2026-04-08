@@ -17,18 +17,6 @@ function ConfirmContent() {
   const next = searchParams.get('next') ?? '/upload';
 
   useEffect(() => {
-    // URLにハッシュパラメータ(#)で付与された場合にクエリとして取り出すためのフォールバック処理
-    // (万が一email templateで #token_hash="..." のようにした場合)
-    if (!token_hash && typeof window !== 'undefined' && window.location.hash) {
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const hashToken = hashParams.get('token_hash');
-      const hashType = hashParams.get('type');
-      if (hashToken && hashType) {
-        // Here we could set state or redirect to include them as query params,
-        // but for now relying on query params is the standard for token_hash.
-      }
-    }
-
     if (!token_hash || !type) {
       setErrorMessage('無効なリンクです。ログインページからやり直してください。');
       setStatus('error');

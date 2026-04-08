@@ -5,6 +5,7 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   // nextに指定されたURLへリダイレクト。デフォルトは /upload
+  // アップロード固定（emailRedirectToに?next=を付けずシンプルに）
   const next = searchParams.get('next') ?? '/upload'
 
   // デバッグ用ログ（問題解決後に削除予定）

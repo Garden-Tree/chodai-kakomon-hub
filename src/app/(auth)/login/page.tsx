@@ -33,7 +33,8 @@ export default function LoginPage() {
       // ※ PKCE の code verifier をブラウザ側で生成・保存するために必須
       const supabase = createClient();
       // シンプルなURLにして Supabase の Redirect URLs マッチングを確実にする
-      const emailRedirectTo = `${window.location.origin}/auth/callback`;
+      // 今回から /auth/callback は使用せず、直接/uploadへ遷移させる
+      const emailRedirectTo = `${window.location.origin}/upload`;
 
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email,

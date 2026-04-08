@@ -13,7 +13,7 @@ src/
 │   ├── (public)/         # 未ログインでもアクセス可能な公開ページ群
 │   ├── actions/          # Server Actions（サーバー側で実行されるデータ処理処理）
 │   ├── api/              # API Routes
-│   ├── auth/             # 認証用のエンドポイント処理（コールバック処理など）
+│   ├── auth/             # 認証関連（メールスキャナー対策の確認用クッションページ /auth/confirm など）
 │   ├── login-common/     # ログイン画面などの共通ページ
 │   ├── favicon.ico
 │   ├── globals.css       # グローバルなCSS設定（Tailwindのエントリー含む）
@@ -25,7 +25,7 @@ src/
 │   ├── prisma.ts         # Prismaのグローバルクライアントのインスタンス化
 │   ├── supabase.ts       # Supabaseの共通関数・設定
 │   └── utils.ts          # Tailwindのクラスマージなど、汎用的なヘルパー関数
-└── middleware.ts         # Next.jsのEdge Middleware（セッション管理や動的なルート保護を担当）
+└── proxy.ts              # Next.jsの代理(Proxy)構成（セッション管理や動的なルート保護を担当。※旧middleware.ts）
 ```
 
 *(その他ルートディレクトリに関する重要項目)*
@@ -119,13 +119,14 @@ npx prisma studio
 本プロジェクトでは Supabase Auth を採用し、Next.js の App Router (Server Components) と安全に統合するために `@supabase/ssr` を利用しています。
 
 ```
-ブラウザ → [middleware.ts] → Server Component / API Route
-                (セッション確認)             (Supabaseからセッション取得)
+ブラウザ → [proxy.ts] → Server Component / API Route
+           (セッション確認)             (Supabaseからセッション取得)
 ```
 
-1. `middleware.ts` が全リクエストを受け取り、Supabaseのセッションクッキーを更新します。
-2. 各ページやServer Actionはサーバー側でセッションを確認し、未認証の場合はリダイレクトします。
-3. クライアントサイドのみの認証判断を行わないため、セキュアな設計を実現しています。
+1. **セッション管理**: `proxy.ts` がリクエストを受け取り、未認証時はリダイレクトさせつつSupabaseのセッションクッキーを監視します。
+2. **マジックリンク認証（スキャナー対策）**: 大学のメールセキュリティ（Safe Links等）によるトークンの自動消費を防ぐため、メール内のリンクは一度クライアント側のクッションページ (`/auth/confirm`) へ遷移する設計になっています。
+3. **安全な検証**: クッションページでユーザーが「ログイン完了」ボタンを押すことで初めて `token_hash` が検証され、完了後に自動的にアップロード画面等へ遷移します。
+4. **セキュアな設計**: サーバーサイド (`@supabase/ssr`) でもクッキー経由で確実にセッションを確認し、各ページを保護しています。
 
 ### データベース構成 (Prisma + pg)
 

@@ -18,12 +18,18 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     // 環境変数 NEXT_PUBLIC_SITE_URL を最優先にすることで、本番環境でも必ず正しいURLを使う
     // 未設定時のみリクエストの origin ヘッダーにフォールバック（ローカル開発向け）
-    const origin = process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'http://localhost:3000';
+    // 末尾スラッシュを除去してダブルスラッシュを防ぐ
+    const rawOrigin = process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'http://localhost:3000';
+    const origin = rawOrigin.replace(/\/$/, '');
+    const emailRedirectTo = `${origin}/auth/callback?next=/upload`;
+
+    // デバッグ用ログ（問題解決後に削除予定）
+    console.log('[send-magic-link] emailRedirectTo:', emailRedirectTo);
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${origin}/auth/callback?next=/upload`,
+        emailRedirectTo,
       },
     });
 

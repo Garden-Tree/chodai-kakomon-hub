@@ -51,7 +51,11 @@ function ConfirmContent() {
       setErrorMessage('認証に失敗しました。リンクがすでに使用されたか、期限切れです。');
       setStatus('error');
     } else {
-      router.push(next);
+      if (next.includes('/auth/callback')) {
+        router.push('/upload');
+      } else {
+        router.push(next);
+      }
     }
   };
 

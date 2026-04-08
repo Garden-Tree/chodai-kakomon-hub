@@ -14,7 +14,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 認証・アップロード関連のルートやログイン画面自体はリダイレクトしない
-  const skipPaths = ['/login-common', '/upload', '/login'];
+  const skipPaths = ['/login-common', '/upload', '/login', '/auth/callback'];
   if (skipPaths.some(path => pathname.startsWith(path))) {
     return NextResponse.next();
   }

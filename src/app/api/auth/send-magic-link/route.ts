@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
@@ -15,26 +14,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createClient();
-    // 環境変数 NEXT_PUBLIC_SITE_URL を最優先にすることで、本番環境でも必ず正しいURLを使う
-    // 未設定時のみリクエストの origin ヘッダーにフォールバック（ローカル開発向け）
-    const origin = process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'http://localhost:3000';
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${origin}/auth/callback?next=/upload`,
-      },
-    });
-
-    if (error) {
-      console.error('Magic link sign-in error:', error);
-      return NextResponse.json({ error: 'メール送信に失敗しました。時間をおいて再試行してください。' }, { status: 500 });
-    }
-
-    return NextResponse.json({ success: true });
+    // メールアドレスの検証のみ行う
+    // signInWithOtp はクライアント側（ブラウザ）で呼び出すことで
+    // PKCE の code verifier がブラウザに正しく保存されるようにする
+    return NextResponse.json({ valid: true });
   } catch (err) {
-    console.error('Send magic link err:', err);
+    console.error('Validate email err:', err);
     return NextResponse.json({ error: 'サーバー内部エラーが発生しました。' }, { status: 500 });
   }
 }

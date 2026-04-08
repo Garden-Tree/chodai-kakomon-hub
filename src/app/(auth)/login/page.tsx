@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -16,6 +17,7 @@ export default function LoginPage() {
     setErrorMessage('');
 
     try {
+      // Step 1: サーバー側でメールアドレスを検証（*.ac.jp チェック）
       const res = await fetch('/api/auth/send-magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -25,6 +27,24 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || '不明なエラーが発生しました');
+      }
+
+      // Step 2: ブラウザの Supabase クライアントで signInWithOtp を呼ぶ
+      // ※ PKCE の code verifier をブラウザ側で生成・保存するために必須
+      const supabase = createClient();
+      // シンプルなURLにして Supabase の Redirect URLs マッチングを確実にする
+      const emailRedirectTo = `${window.location.origin}/auth/callback`;
+
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo,
+        },
+      });
+
+      if (otpError) {
+        console.error('signInWithOtp error:', otpError);
+        throw new Error('メール送信に失敗しました。時間をおいて再試行してください。');
       }
 
       setStatus('success');

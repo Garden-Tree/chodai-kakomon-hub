@@ -9,7 +9,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             過去問共有Hub
           </Link>
           <div className="flex gap-4 items-center">
-            <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900 bg-slate-100 px-4 py-2 rounded-md transition-colors">
+            <Link href="/upload" className="text-sm font-medium text-slate-600 hover:text-slate-900 bg-slate-100 px-4 py-2 rounded-md transition-colors">
               アップロード
             </Link>
           </div>

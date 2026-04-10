@@ -8,7 +8,7 @@ datasource db {
 
 // 学部
 model Faculty {
-  id        String    @id @default(uuid())
+  id        String    @id @default(dbgenerated("gen_random_uuid()::text"))
   name      String    @unique // 例: 情報データ科学部
   subjects  Subject[]
   createdAt DateTime  @default(now())
@@ -16,7 +16,7 @@ model Faculty {
 
 // 授業（科目）
 model Subject {
-  id        String   @id @default(uuid())
+  id        String   @id @default(dbgenerated("gen_random_uuid()::text"))
   name      String   // 例: 線形代数学I
   faculty   Faculty  @relation(fields: [facultyId], references: [id])
   facultyId String
@@ -28,7 +28,7 @@ model Subject {
 
 // 過去問データ
 model Exam {
-  id          String   @id @default(uuid())
+  id          String   @id @default(dbgenerated("gen_random_uuid()::text"))
   subject     Subject  @relation(fields: [subjectId], references: [id])
   subjectId   String
   year        Int      // 開講年度 (例: 2024)

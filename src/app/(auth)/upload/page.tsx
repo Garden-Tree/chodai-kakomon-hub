@@ -24,14 +24,13 @@ export default async function UploadPage() {
   });
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4 animate-in fade-in duration-500">
+    <div className="w-full sm:w-[768px] mx-auto py-8 px-4 animate-in fade-in duration-500">
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">過去問のアップロード</h1>
         <p className="text-slate-500 mt-2">
           ログイン中: <span className="font-medium text-slate-700">{user.email}</span>
         </p>
       </div>
-      
       <UploadForm subjects={subjects} faculties={faculties} />
     </div>
   );

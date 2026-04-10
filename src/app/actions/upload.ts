@@ -5,9 +5,9 @@ import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
 const formSchema = z.object({
+  facultyId: z.string().min(1),
   subjectId: z.string().min(1),
   targetSubjectId: z.string().uuid().optional(),
-  newSubjectFacultyId: z.string().optional(),
   newSubjectName: z.string().optional(),
   year: z.number().int().min(1900).max(new Date().getFullYear()),
   instructor: z.string().min(1).max(100),
@@ -31,7 +31,7 @@ export async function saveExamData(data: z.infer<typeof formSchema>) {
 
   // 新規科目の作成処理が選択された場合
   if (validated.subjectId === 'new') {
-    if (!validated.newSubjectName || !validated.newSubjectFacultyId || !validated.targetSubjectId) {
+    if (!validated.newSubjectName || !validated.facultyId || !validated.targetSubjectId) {
       throw new Error('新規科目の情報が不足しています。');
     }
     
@@ -40,7 +40,7 @@ export async function saveExamData(data: z.infer<typeof formSchema>) {
       where: {
         name_facultyId: {
           name: validated.newSubjectName,
-          facultyId: validated.newSubjectFacultyId,
+          facultyId: validated.facultyId,
         }
       }
     });
@@ -50,7 +50,7 @@ export async function saveExamData(data: z.infer<typeof formSchema>) {
         data: {
           id: validated.targetSubjectId,
           name: validated.newSubjectName,
-          facultyId: validated.newSubjectFacultyId,
+          facultyId: validated.facultyId,
         }
       });
     }

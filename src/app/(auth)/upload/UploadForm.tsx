@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,19 +13,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 
 const formSchema = z.object({
+  facultyId: z.string().min(1, '学部を選択してください'),
   subjectId: z.string().min(1, '科目を選択してください'),
-  newSubjectFacultyId: z.string().optional(),
   newSubjectName: z.string().optional(),
   year: z.number().int().min(1900, '正しい年を入力してください'),
   instructor: z.string().min(1, '担当教員を入力してください'),
 }).superRefine((data, ctx) => {
-  if (data.subjectId === 'new') {
-    if (!data.newSubjectFacultyId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "学部を選択してください", path: ["newSubjectFacultyId"] });
-    }
-    if (!data.newSubjectName?.trim()) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "科目名を入力してください", path: ["newSubjectName"] });
-    }
+  if (data.subjectId === 'new' && !data.newSubjectName?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "科目名を入力してください",
+      path: ["newSubjectName"]
+    });
   }
 });
 
@@ -37,14 +36,25 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState('');
 
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       year: new Date().getFullYear(),
+      facultyId: '',
+      subjectId: '',
     }
   });
 
+  const facultyIdValue = watch('facultyId');
   const subjectIdValue = watch('subjectId');
+
+  // 学部が変更されたら科目の選択をリセットする
+  useEffect(() => {
+    setValue('subjectId', '');
+  }, [facultyIdValue, setValue]);
+
+  // 選択された学部の科目のみを抽出
+  const filteredSubjects = subjects.filter(s => s.facultyId === facultyIdValue);
 
   const onSubmit = async (data: FormData) => {
     if (!file) {
@@ -54,10 +64,9 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
 
     setIsUploading(true);
     setError('');
-    
+
     try {
       const supabase = createClient();
-      
       // 保存やStorageパスに使うためのSubject IDを決定（新規科目の場合はここでUUIDを採番）
       const targetSubjectId = data.subjectId === 'new' ? crypto.randomUUID() : data.subjectId;
       const fileExt = file.name.split('.').pop() || '';
@@ -83,7 +92,7 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
 
       // 完了後、アップロードした科目のページへリダイレクト
       router.push(`/subject/${result.subjectId}`);
-      
+
     } catch (err: any) {
       console.error(err);
       setError(err.message || '予期せぬエラーが発生しました');
@@ -92,102 +101,119 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
   };
 
   return (
-    <Card className="border-slate-200">
-      <CardHeader>
-        <CardTitle>過去問ファイル情報</CardTitle>
+    <Card className="border-slate-200 shadow-sm w-full flex flex-col">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-xl">過去問ファイル情報</CardTitle>
         <CardDescription>
-          アップロードする過去問の科目、年度、担当教員を入力してください。
+          アップロードする過去問の情報を入力してください。
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="space-y-2">
-            <Label>科目</Label>
-            <select
-              {...register('subjectId')}
-              className="flex h-10 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2"
-            >
-              <option value="">科目を選択してください</option>
-              {subjects.map(subject => (
-                <option key={subject.id} value={subject.id}>
-                  {subject.faculty.name} - {subject.name}
-                </option>
-              ))}
-              <option value="new">+ 新しい科目を追加する</option>
-            </select>
-            {errors.subjectId && <p className="text-sm text-red-500">{errors.subjectId.message}</p>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="faculty-select">学部</Label>
+              <select
+                id="faculty-select"
+                {...register('facultyId')}
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm"
+              >
+                <option value="">学部を選択してください</option>
+                {faculties.map(f => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+              {errors.facultyId && <p className="text-sm text-red-500">{errors.facultyId.message}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="subject-select">科目</Label>
+              <select
+                id="subject-select"
+                {...register('subjectId')}
+                disabled={!facultyIdValue}
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 md:text-sm"
+              >
+                {!facultyIdValue ? (
+                  <option value="">先に学部を選択してください</option>
+                ) : (
+                  <>
+                    <option value="">科目を選択してください</option>
+                    {filteredSubjects.map(subject => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.name}
+                      </option>
+                    ))}
+                    <option value="new">+ 新しい科目を追加する</option>
+                  </>
+                )}
+              </select>
+              {errors.subjectId && <p className="text-sm text-red-500">{errors.subjectId.message}</p>}
+            </div>
           </div>
 
           {/* 新規科目が選択されたときだけ表示される入力欄 */}
           {subjectIdValue === 'new' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-slate-50 p-4 border border-slate-200 rounded-md">
-              <div className="space-y-2">
-                <Label>学部 (新規科目用)</Label>
-                <select
-                  {...register('newSubjectFacultyId')}
-                  className="flex h-10 w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">学部を選択してください</option>
-                  {faculties.map(f => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
-                  ))}
-                </select>
-                {errors.newSubjectFacultyId && <p className="text-sm text-red-500">{errors.newSubjectFacultyId.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label>科目名 (新規科目用)</Label>
-                <Input
-                  {...register('newSubjectName')}
-                  placeholder="例: 線形代数学II"
-                  className="bg-white"
-                />
-                {errors.newSubjectName && <p className="text-sm text-red-500">{errors.newSubjectName.message}</p>}
-              </div>
+            <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+              <Label htmlFor="new-subject-name">新しい科目名</Label>
+              <Input
+                id="new-subject-name"
+                {...register('newSubjectName')}
+                placeholder="例: 線形代数学II"
+                className="bg-slate-50 border-blue-200 focus:border-blue-500"
+              />
+              {errors.newSubjectName && <p className="text-sm text-red-500">{errors.newSubjectName.message}</p>}
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>開講年度</Label>
+              <Label htmlFor="year-input">開講年度</Label>
               <Input
+                id="year-input"
                 type="number"
                 {...register('year', { valueAsNumber: true })}
-                className="w-full"
               />
               {errors.year && <p className="text-sm text-red-500">{errors.year.message}</p>}
             </div>
 
             <div className="space-y-2">
-              <Label>担当教員</Label>
+              <Label htmlFor="instructor-input">担当教員</Label>
               <Input
+                id="instructor-input"
                 type="text"
                 {...register('instructor')}
                 placeholder="例: 佐藤 太郎"
-                className="w-full"
               />
               {errors.instructor && <p className="text-sm text-red-500">{errors.instructor.message}</p>}
             </div>
           </div>
 
           <div className="space-y-2 pt-2">
-            <Label>過去問ファイル (PDF, 画像等)</Label>
-            <div className="border border-slate-200 rounded-md p-1 bg-slate-50">
+            <Label>ファイル</Label>
+            <div className="border border-dashed border-slate-300 rounded-lg p-4 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer relative">
               <Input
                 type="file"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="bg-white"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
+              <div className="text-center">
+                <p className="text-sm text-slate-600">
+                  {file ? <span className="font-medium text-slate-900">{file.name}</span> : 'クリックまたはドラッグ＆ドロップで選択'}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">PDF または 画像ファイル</p>
+              </div>
             </div>
           </div>
 
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm border border-red-100">
+            <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm border border-red-100 animate-in shake duration-300">
               {error}
             </div>
           )}
 
-          <Button type="submit" disabled={isUploading} className="w-full mt-4">
-            {isUploading ? 'アップロード処理中...' : 'アップロードを完了する'}
+          <Button type="submit" disabled={isUploading} className="w-full mt-4 h-11 text-base font-bold">
+            {isUploading ? 'アップロード中...' : 'アップロードを完了する'}
           </Button>
         </form>
       </CardContent>

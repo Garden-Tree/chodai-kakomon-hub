@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
 import { Card } from '@/components/ui/card';
-import { Download } from 'lucide-react';
+import { Download, Eye } from 'lucide-react';
 
 type Props = {
   params: Promise<{ id: string }>
@@ -50,15 +50,24 @@ export default async function SubjectPage({ params }: Props) {
                     <span>アップロード日付: {new Date(exam.createdAt).toLocaleDateString('ja-JP')}</span>
                   </div>
                 </div>
-                <a 
-                  href={`/api/download/${exam.id}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="shrink-0 inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 h-10 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  ダウンロード
-                </a>
+                <div className="flex gap-2 shrink-0">
+                  <a 
+                    href={`/api/download/${exam.id}?preview=true`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 h-10 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 text-slate-700"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    プレビュー
+                  </a>
+                  <a 
+                    href={`/api/download/${exam.id}`} 
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 h-10 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    ダウンロード
+                  </a>
+                </div>
               </Card>
             ))}
           </div>

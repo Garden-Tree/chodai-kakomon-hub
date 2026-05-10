@@ -30,12 +30,14 @@ export async function GET(
 
     // 3. Supabase Storage から Signed URL を生成 (期限: 60秒)
     // RLSが設定されているBucketであっても、Admin Keyを使用するためバイパス可能
+    const isPreview = request.nextUrl.searchParams.get('preview') === 'true';
+
     const { data, error } = await supabaseAdmin
       .storage
       .from('exams')
       .createSignedUrl(exam.fileUrl, 60, {
-        // 設定されたfileNameがある場合はダウンロード名として指定、なければtrue（デフォルトの動作）
-        download: exam.fileName || true
+        // プレビューモードならdownloadオプションを無効化、そうでなければファイル名を指定
+        download: isPreview ? false : (exam.fileName || true)
       });
 
     if (error || !data?.signedUrl) {

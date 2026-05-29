@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
-import { Card } from '@/components/ui/card';
-import { Download, Eye } from 'lucide-react';
+import { createClient } from '@/lib/supabase/server';
+import { ExamList } from '@/components/ExamList';
 
 type Props = {
   params: Promise<{ id: string }>
@@ -10,12 +10,29 @@ type Props = {
 export default async function SubjectPage({ params }: Props) {
   const { id } = await params;
 
+  // 認証の確認（任意、ログインしていない場合は null）
+  let currentUserEmail: string | null = null;
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    currentUserEmail = user?.email || null;
+  } catch (e) {
+    console.error('Failed to retrieve user session:', e);
+  }
+
   // 科目とその過去問を年度の降順で取得
   const subject = await prisma.subject.findUnique({
     where: { id },
     include: {
-      faculty: true,
+      faculty: {
+        include: {
+          courses: true
+        }
+      },
       exams: {
+        include: {
+          courses: true
+        },
         orderBy: { year: 'desc' }
       }
     }
@@ -25,6 +42,37 @@ export default async function SubjectPage({ params }: Props) {
     notFound();
   }
 
+  // Dateオブジェクトをシリアライズしてクライアントコンポーネントに渡す
+  const serializedExams = subject.exams.map(exam => ({
+    id: exam.id,
+    year: exam.year,
+    instructor: exam.instructor,
+    fileUrl: exam.fileUrl,
+    fileName: exam.fileName,
+    comment: exam.comment,
+    uploadedBy: exam.uploadedBy,
+    createdAt: exam.createdAt.toISOString(),
+    courses: exam.courses.map(course => ({
+      id: course.id,
+      name: course.name,
+      facultyId: course.facultyId
+    }))
+  }));
+
+  const serializedSubject = {
+    id: subject.id,
+    name: subject.name,
+    faculty: {
+      id: subject.faculty.id,
+      name: subject.faculty.name,
+      courses: subject.faculty.courses.map(course => ({
+        id: course.id,
+        name: course.name,
+        facultyId: course.facultyId
+      }))
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
@@ -33,45 +81,11 @@ export default async function SubjectPage({ params }: Props) {
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold text-slate-800 border-b pb-2">過去問一覧 ({subject.exams.length}件)</h2>
-        
-        {subject.exams.length === 0 ? (
-          <p className="text-slate-500 py-4 bg-slate-50 px-4 rounded-md">
-            この科目の過去問はまだアップロードされていません。
-          </p>
-        ) : (
-          <div className="grid gap-4">
-            {subject.exams.map(exam => (
-              <Card key={exam.id} className="border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between p-5 gap-4 hover:shadow-md transition-shadow bg-white">
-                <div>
-                  <h3 className="text-lg font-medium text-slate-900">{exam.year}年度</h3>
-                  <div className="text-sm text-slate-500 mt-1 flex gap-3 flex-wrap">
-                    <span>担当: <span className="text-slate-700">{exam.instructor}</span></span>
-                    <span>アップロード日付: {new Date(exam.createdAt).toLocaleDateString('ja-JP')}</span>
-                  </div>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <a 
-                    href={`/api/download/${exam.id}?preview=true`} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 h-10 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 text-slate-700"
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    プレビュー
-                  </a>
-                  <a 
-                    href={`/api/download/${exam.id}`} 
-                    className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 h-10 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    ダウンロード
-                  </a>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
+        <ExamList 
+          subject={serializedSubject}
+          exams={serializedExams}
+          currentUserEmail={currentUserEmail}
+        />
       </div>
     </div>
   );

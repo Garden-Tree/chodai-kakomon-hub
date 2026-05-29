@@ -18,7 +18,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 認証・アップロード関連のルートやログイン画面自体はリダイレクトしない
-  const skipPaths = ['/login-common', '/upload', '/login', '/auth/confirm'];
+  const skipPaths = ['/login-common', '/upload', '/login', '/auth/confirm', '/mypage'];
   if (skipPaths.some(path => pathname.startsWith(path))) {
     return response;
   }

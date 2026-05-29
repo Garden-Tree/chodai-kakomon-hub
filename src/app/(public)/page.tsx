@@ -1,8 +1,7 @@
 import { prisma } from '@/lib/prisma';
-import Link from 'next/link';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { AccordionRoot, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
+import { SubjectList } from '@/components/SubjectList';
 
 type Props = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -15,11 +14,17 @@ export default async function TopPage({ searchParams }: Props) {
   // 学部ごとに科目を検索して取得
   const faculties = await prisma.faculty.findMany({
     include: {
+      courses: {
+        orderBy: { name: 'asc' }
+      },
       subjects: {
         where: {
           name: {
             contains: query,
           }
+        },
+        include: {
+          courses: true
         },
         orderBy: { name: 'asc' }
       }
@@ -60,25 +65,7 @@ export default async function TopPage({ searchParams }: Props) {
                 </span>
               </AccordionTrigger>
               <AccordionContent value={faculty.id}>
-                {faculty.subjects.length === 0 ? (
-                  <p className="text-slate-500 text-sm py-8 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
-                    該当する科目がありません。
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-                    {faculty.subjects.map(subject => (
-                      <Link key={subject.id} href={`/subject/${subject.id}`}>
-                        <Card className="hover:border-slate-800 hover:shadow-md transition-all cursor-pointer h-full border-slate-200 group">
-                          <CardHeader className="py-4">
-                            <CardTitle className="text-base font-medium text-slate-800 group-hover:text-slate-900 transition-colors">
-                              {subject.name}
-                            </CardTitle>
-                          </CardHeader>
-                        </Card>
-                      </Link>
-                    ))}
-                  </div>
-                )}
+                <SubjectList subjects={faculty.subjects} courses={faculty.courses} />
               </AccordionContent>
             </AccordionItem>
           ))}

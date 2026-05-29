@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 const formSchema = z.object({
   facultyId: z.string().min(1, '学部を選択してください'),
@@ -18,6 +19,8 @@ const formSchema = z.object({
   newSubjectName: z.string().optional(),
   year: z.number().int().min(1900, '正しい年を入力してください'),
   instructor: z.string().min(1, '担当教員を入力してください'),
+  comment: z.string().max(1000, '備考・メモは1000文字以内で入力してください').optional(),
+  courseIds: z.array(z.string()).optional(),
   agreeTerms: z.boolean().refine(val => val === true, {
     message: 'アップロードには注意事項への同意が必要です',
   }),
@@ -29,11 +32,18 @@ const formSchema = z.object({
       path: ["newSubjectName"]
     });
   }
+  if (data.subjectId === 'new' && (!data.courseIds || data.courseIds.length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "少なくとも1つのコースを選択してください",
+      path: ["courseIds"]
+    });
+  }
 });
 
 type FormData = z.infer<typeof formSchema>;
 
-export function UploadForm({ subjects, faculties }: { subjects: any[], faculties: any[] }) {
+export function UploadForm({ subjects, faculties, courses }: { subjects: any[], faculties: any[], courses: any[] }) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -46,6 +56,8 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
       year: new Date().getFullYear(),
       facultyId: '',
       subjectId: '',
+      comment: '',
+      courseIds: [],
       agreeTerms: false,
     }
   });
@@ -53,17 +65,35 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
   const facultyIdValue = watch('facultyId');
   const subjectIdValue = watch('subjectId');
 
-  // 学部が変更されたら科目の選択をリセットする
+  // 学部が変更されたら科目の選択とコースの選択をリセットする
+  // また、コースが存在する場合はデフォルトで全選択にする
   useEffect(() => {
     setValue('subjectId', '');
-  }, [facultyIdValue, setValue]);
+    const courseIdsOfFaculty = courses.filter(c => c.facultyId === facultyIdValue).map(c => c.id);
+    setValue('courseIds', courseIdsOfFaculty);
+  }, [facultyIdValue, setValue, courses]);
 
-  // 選択された学部の科目のみを抽出
+  // 選択された学部の科目・コースを抽出
   const filteredSubjects = subjects.filter(s => s.facultyId === facultyIdValue);
+  const selectedCourseIds = watch('courseIds') || [];
+  const filteredCourses = courses.filter(c => c.facultyId === facultyIdValue);
+
+  const handleAllCoursesToggle = (checked: boolean) => {
+    if (checked) {
+      setValue('courseIds', filteredCourses.map(c => c.id));
+    } else {
+      setValue('courseIds', []);
+    }
+  };
 
   const onSubmit = async (data: FormData) => {
     if (!file) {
       setError('ファイルを選択してください');
+      return;
+    }
+
+    if (filteredCourses.length > 0 && selectedCourseIds.length === 0) {
+      setError('少なくとも1つの対象コースを選択してください。');
       return;
     }
 
@@ -171,6 +201,58 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
             </div>
           )}
 
+          {/* 選択した学部にコースが存在するときは常に表示されるコース選択 */}
+          {facultyIdValue && filteredCourses.length > 0 && (
+            <div className="space-y-2 border border-slate-200 bg-slate-50 p-4 rounded-lg animate-in slide-in-from-top-2 duration-300">
+              <Label className="font-semibold text-slate-800">対象コース</Label>
+              <p className="text-xs text-slate-500 mb-3">この過去問が対象とするコースを選択してください（複数選択可）。</p>
+              
+              <div className="flex flex-col gap-2.5">
+                {/* 全コース共通 */}
+                <div className="flex items-center gap-2">
+                  <input
+                    id="all-courses-toggle"
+                    type="checkbox"
+                    checked={filteredCourses.length > 0 && filteredCourses.every(c => selectedCourseIds.includes(c.id))}
+                    onChange={(e) => handleAllCoursesToggle(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="all-courses-toggle" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                    全コース共通
+                  </label>
+                </div>
+
+                <hr className="border-slate-200 my-1" />
+
+                {/* 個別コース */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-1">
+                  {filteredCourses.map(course => (
+                    <div key={course.id} className="flex items-center gap-2">
+                      <input
+                        id={`course-${course.id}`}
+                        type="checkbox"
+                        checked={selectedCourseIds.includes(course.id)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          if (checked) {
+                            setValue('courseIds', [...selectedCourseIds, course.id]);
+                          } else {
+                            setValue('courseIds', selectedCourseIds.filter(id => id !== course.id));
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <label htmlFor={`course-${course.id}`} className="text-sm text-slate-600 cursor-pointer select-none">
+                        {course.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {errors.courseIds && <p className="text-sm text-red-500 mt-1">{errors.courseIds.message}</p>}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="year-input">開講年度</Label>
@@ -192,6 +274,17 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
               />
               {errors.instructor && <p className="text-sm text-red-500">{errors.instructor.message}</p>}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="comment-input">備考・メモ（任意）</Label>
+            <Textarea
+              id="comment-input"
+              {...register('comment')}
+              placeholder="例: 中間試験の問題です。解答は含まれていません。持ち込み情報など自由に記載してください。"
+              className="min-h-[80px]"
+            />
+            {errors.comment && <p className="text-sm text-red-500">{errors.comment.message}</p>}
           </div>
 
           <div className="space-y-2 pt-2">

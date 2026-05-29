@@ -23,6 +23,11 @@ export default async function UploadPage() {
     orderBy: { name: 'asc' }
   });
 
+  // コース一覧も取得
+  const courses = await prisma.course.findMany({
+    orderBy: { name: 'asc' }
+  });
+
   return (
     <div className="w-full sm:w-[768px] mx-auto py-8 px-4 animate-in fade-in duration-500">
       <div className="mb-8">
@@ -31,7 +36,7 @@ export default async function UploadPage() {
           ログイン中: <span className="font-medium text-slate-700">{user.email}</span>
         </p>
       </div>
-      <UploadForm subjects={subjects} faculties={faculties} />
+      <UploadForm subjects={subjects} faculties={faculties} courses={courses} />
     </div>
   );
 }

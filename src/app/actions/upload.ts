@@ -13,6 +13,8 @@ const formSchema = z.object({
   instructor: z.string().min(1).max(100),
   fileUrl: z.string().min(1),
   fileName: z.string().optional(),
+  comment: z.string().max(1000).optional(),
+  courseIds: z.array(z.string()).optional(),
 });
 
 export async function saveExamData(data: z.infer<typeof formSchema>) {
@@ -51,6 +53,9 @@ export async function saveExamData(data: z.infer<typeof formSchema>) {
           id: validated.targetSubjectId,
           name: validated.newSubjectName,
           facultyId: validated.facultyId,
+          courses: {
+            connect: (validated.courseIds || []).map(id => ({ id }))
+          }
         }
       });
     }
@@ -65,9 +70,98 @@ export async function saveExamData(data: z.infer<typeof formSchema>) {
       instructor: validated.instructor,
       fileUrl: validated.fileUrl,
       fileName: validated.fileName,
+      comment: validated.comment || null,
+      courses: {
+        connect: (validated.courseIds || []).map(id => ({ id }))
+      },
       uploadedBy: user.email, // 認証済みユーザーのメールアドレスを記録
     }
   });
 
   return { success: true, examId: exam.id, subjectId: finalSubjectId };
+}
+
+const editFormSchema = z.object({
+  examId: z.string().uuid(),
+  year: z.number().int().min(1900).max(new Date().getFullYear()),
+  instructor: z.string().min(1).max(100),
+  comment: z.string().max(1000).optional(),
+  courseIds: z.array(z.string()).optional(),
+});
+
+export async function updateExamData(data: z.infer<typeof editFormSchema>) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user || !user.email) {
+    throw new Error('認証されていません。再度ログインしてください。');
+  }
+
+  const validated = editFormSchema.parse(data);
+
+  // 過去問がユーザー自身のものであるか確認
+  const existingExam = await prisma.exam.findUnique({
+    where: { id: validated.examId }
+  });
+
+  if (!existingExam) {
+    throw new Error('過去問が見つかりません。');
+  }
+
+  if (existingExam.uploadedBy !== user.email) {
+    throw new Error('他のユーザーがアップロードした過去問は編集できません。');
+  }
+
+  // アップデート
+  await prisma.exam.update({
+    where: { id: validated.examId },
+    data: {
+      year: validated.year,
+      instructor: validated.instructor,
+      comment: validated.comment || null,
+      courses: {
+        set: (validated.courseIds || []).map(id => ({ id }))
+      }
+    }
+  });
+
+  return { success: true };
+}
+
+export async function deleteExamData(examId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user || !user.email) {
+    throw new Error('認証されていません。再度ログインしてください。');
+  }
+
+  // 過去問がユーザー自身のものであるか確認
+  const existingExam = await prisma.exam.findUnique({
+    where: { id: examId }
+  });
+
+  if (!existingExam) {
+    throw new Error('過去問が見つかりません。');
+  }
+
+  if (existingExam.uploadedBy !== user.email) {
+    throw new Error('他のユーザーがアップロードした過去問は削除できません。');
+  }
+
+  // 1. Supabase Storageからファイルを削除
+  const { error: storageError } = await supabase.storage
+    .from('exams')
+    .remove([existingExam.fileUrl]);
+
+  if (storageError) {
+    console.error('Failed to delete file from storage:', storageError);
+  }
+
+  // 2. DBから削除
+  await prisma.exam.delete({
+    where: { id: examId }
+  });
+
+  return { success: true };
 }

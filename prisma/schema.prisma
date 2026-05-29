@@ -11,7 +11,21 @@ model Faculty {
   id        String    @id @default(dbgenerated("gen_random_uuid()::text"))
   name      String    @unique // 例: 情報データ科学部
   subjects  Subject[]
+  courses   Course[]
   createdAt DateTime  @default(now())
+}
+
+// コース（専攻）
+model Course {
+  id        String    @id @default(dbgenerated("gen_random_uuid()::text"))
+  name      String    // 例: インフォメーションサイエンスコース（IS）
+  faculty   Faculty   @relation(fields: [facultyId], references: [id])
+  facultyId String
+  subjects  Subject[]
+  exams     Exam[]
+  createdAt DateTime  @default(now())
+
+  @@unique([name, facultyId]) // 同じ学部内に同名のコースは作らない制約
 }
 
 // 授業（科目）
@@ -21,6 +35,7 @@ model Subject {
   faculty   Faculty  @relation(fields: [facultyId], references: [id])
   facultyId String
   exams     Exam[]
+  courses   Course[]
   createdAt DateTime @default(now())
 
   @@unique([name, facultyId]) // 同じ学部内に同名の科目は作らない制約
@@ -36,7 +51,23 @@ model Exam {
   fileUrl     String   // Supabase Storage上のパス
   fileName    String?  // 元のファイル名を追加
   uploadedBy  String   // アップロード者のac.jpメールアドレス
+  comment     String?  // 備考・メモ
+  courses     Course[]
+  reports     Report[]
   createdAt   DateTime @default(now())
 
   @@index([subjectId, year(sort: Desc)]) // 授業ページでの年度降順ソート用インデックス
+}
+
+// 通報・削除申請データ
+model Report {
+  id          String   @id @default(dbgenerated("gen_random_uuid()::text"))
+  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  examId      String
+  reason      String   // 通報理由
+  details     String?  // 補足説明
+  reportedBy  String   // 通報者のメールアドレス
+  createdAt   DateTime @default(now())
+
+  @@index([examId])
 }

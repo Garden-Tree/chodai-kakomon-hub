@@ -1,8 +1,8 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { SubmitButton } from './submit-button';
 
 export default function LoginCommonPage() {
   async function submitPassword(formData: FormData) {
@@ -39,9 +39,7 @@ export default function LoginCommonPage() {
                 required
               />
             </div>
-            <Button type="submit" className="w-full">
-              閲覧する
-            </Button>
+            <SubmitButton />
           </form>
         </CardContent>
       </Card>

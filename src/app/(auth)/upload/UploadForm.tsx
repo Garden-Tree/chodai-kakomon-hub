@@ -18,6 +18,9 @@ const formSchema = z.object({
   newSubjectName: z.string().optional(),
   year: z.number().int().min(1900, '正しい年を入力してください'),
   instructor: z.string().min(1, '担当教員を入力してください'),
+  agreeTerms: z.boolean().refine(val => val === true, {
+    message: 'アップロードには注意事項への同意が必要です',
+  }),
 }).superRefine((data, ctx) => {
   if (data.subjectId === 'new' && !data.newSubjectName?.trim()) {
     ctx.addIssue({
@@ -35,6 +38,7 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState('');
+  const [isGuidelineOpen, setIsGuidelineOpen] = useState(false);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -42,6 +46,7 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
       year: new Date().getFullYear(),
       facultyId: '',
       subjectId: '',
+      agreeTerms: false,
     }
   });
 
@@ -206,6 +211,22 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
             </div>
           </div>
 
+          <div className="space-y-2 pt-2">
+            <div className="flex items-start gap-2.5">
+              <input
+                id="agree-terms"
+                type="checkbox"
+                {...register('agreeTerms')}
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              />
+              <label htmlFor="agree-terms" className="text-sm font-normal text-slate-600 leading-relaxed cursor-pointer select-none">
+                ファイル内に<strong>個人情報（氏名・学籍番号など）</strong>が含まれていないこと、<br />
+                および<button type="button" onClick={() => setIsGuidelineOpen(true)} className="text-blue-600 underline font-medium hover:text-blue-800 focus:outline-none cursor-pointer mx-1 inline">過去問共有のガイドライン</button>に同意します。
+              </label>
+            </div>
+            {errors.agreeTerms && <p className="text-sm text-red-500">{errors.agreeTerms.message}</p>}
+          </div>
+
           {error && (
             <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm border border-red-100 animate-in shake duration-300">
               {error}
@@ -217,6 +238,41 @@ export function UploadForm({ subjects, faculties }: { subjects: any[], faculties
           </Button>
         </form>
       </CardContent>
+
+      {isGuidelineOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-lg animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">過去問共有のガイドライン</h3>
+            <div className="space-y-4 text-sm text-slate-600 overflow-y-auto max-h-[60vh] pr-1">
+              <div>
+                <p className="font-semibold text-slate-800">1. 個人情報の完全な保護</p>
+                <p className="pl-3 mt-1">
+                  アップロードするファイル（問題用紙・解答・ノート等）に、自分や他の学生の<strong>氏名、学籍番号、連絡先、顔写真などの個人情報</strong>が一切含まれていないことを確認してください。必要に応じて黒塗りなどで完全に消去してください。
+                </p>
+              </div>
+              
+              <div>
+                <p className="font-semibold text-slate-800">2. 著作権と配布の配慮</p>
+                <p className="pl-3 mt-1">
+                  教員が著作権を有し、外部への公開や配布を明示的に禁止している資料のアップロードは避けてください。本プラットフォームは学内における学習の助け合いを目的に運営されています。
+                </p>
+              </div>
+
+              <div>
+                <p className="font-semibold text-slate-800">3. 正確な情報の入力</p>
+                <p className="pl-3 mt-1">
+                  他の学生が正しく検索して対策できるよう、開講年度、担当教員、科目名を正しく入力してください。
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <Button type="button" onClick={() => setIsGuidelineOpen(false)} className="px-4 py-2 cursor-pointer font-bold">
+                閉じる
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { ArrowLeft, ArrowRight, Trash, Loader2 } from 'lucide-react';
 
 const formSchema = z.object({
   facultyId: z.string().min(1, '学部を選択してください'),
@@ -43,10 +44,86 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
+// 画像ファイルをブラウザ上で結合して1つのPDFを生成するヘルパー関数
+const compileImagesToPdf = async (
+  imageFiles: { file: File }[], 
+  subjectName: string, 
+  year: number
+): Promise<File> => {
+  const { jsPDF } = await import('jspdf');
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  for (let i = 0; i < imageFiles.length; i++) {
+    const file = imageFiles[i].file;
+
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new window.Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = dataUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas context could not be created');
+    ctx.drawImage(img, 0, 0);
+    const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+    if (i > 0) {
+      doc.addPage();
+    }
+
+    const imgWidth = img.width;
+    const imgHeight = img.height;
+    const aspectRatio = imgWidth / imgHeight;
+
+    let printWidth = pageWidth;
+    let printHeight = pageWidth / aspectRatio;
+
+    if (printHeight > pageHeight) {
+      printHeight = pageHeight;
+      printWidth = pageHeight * aspectRatio;
+    }
+
+    const x = (pageWidth - printWidth) / 2;
+    const y = (pageHeight - printHeight) / 2;
+
+    doc.addImage(jpegDataUrl, 'JPEG', x, y, printWidth, printHeight, undefined, 'FAST');
+  }
+
+  const pdfBlob = doc.output('blob');
+  const cleanSubjectName = subjectName ? subjectName.replace(/[\\/:*?"<>|]/g, '_') : 'past_exam';
+  const customFileName = `${cleanSubjectName}_${year}年度_過去問.pdf`;
+
+  return new File([pdfBlob], customFileName, { type: 'application/pdf' });
+};
+
 export function UploadForm({ subjects, faculties, courses }: { subjects: any[], faculties: any[], courses: any[] }) {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
+  
+  // ファイルアップロード関連状態
+  const [uploadMode, setUploadMode] = useState<'pdf' | 'images'>('pdf');
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [imageFiles, setImageFiles] = useState<{ id: string; file: File; previewUrl: string }[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
   const [error, setError] = useState('');
   const [isGuidelineOpen, setIsGuidelineOpen] = useState(false);
 
@@ -73,6 +150,13 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
     setValue('courseIds', courseIdsOfFaculty);
   }, [facultyIdValue, setValue, courses]);
 
+  // 画像プレビュー用URLのクリーンアップ
+  useEffect(() => {
+    return () => {
+      imageFiles.forEach(img => URL.revokeObjectURL(img.previewUrl));
+    };
+  }, [imageFiles]);
+
   // 選択された学部の科目・コースを抽出
   const filteredSubjects = subjects.filter(s => s.facultyId === facultyIdValue);
   const selectedCourseIds = watch('courseIds') || [];
@@ -86,43 +170,103 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
     }
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    const newImages = selectedFiles.map(file => ({
+      id: crypto.randomUUID(),
+      file,
+      previewUrl: URL.createObjectURL(file)
+    }));
+    setImageFiles(prev => [...prev, ...newImages]);
+  };
+
+  const handleRemoveImage = (id: string) => {
+    setImageFiles(prev => {
+      const target = prev.find(img => img.id === id);
+      if (target) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter(img => img.id !== id);
+    });
+  };
+
+  const handleMoveImage = (index: number, direction: 'left' | 'right') => {
+    if (direction === 'left' && index === 0) return;
+    if (direction === 'right' && index === imageFiles.length - 1) return;
+
+    const newIndex = direction === 'left' ? index - 1 : index + 1;
+    const newImages = [...imageFiles];
+    const temp = newImages[index];
+    newImages[index] = newImages[newIndex];
+    newImages[newIndex] = temp;
+    setImageFiles(newImages);
+  };
+
   const onSubmit = async (data: FormData) => {
-    if (!file) {
-      setError('ファイルを選択してください');
-      return;
+    let finalFile: File | null = null;
+
+    if (uploadMode === 'pdf') {
+      if (!pdfFile) {
+        setError('PDFファイルを選択してください');
+        return;
+      }
+      finalFile = pdfFile;
+    } else {
+      if (imageFiles.length === 0) {
+        setError('少なくとも1つの画像ファイルを選択してください');
+        return;
+      }
+      setIsUploading(true);
+      setError('');
+      setUploadStatus('画像をPDFに結合中...');
+      try {
+        const selectedSubject = subjects.find(s => s.id === data.subjectId);
+        const subjectName = data.subjectId === 'new' ? data.newSubjectName : selectedSubject?.name;
+        finalFile = await compileImagesToPdf(imageFiles, subjectName || '過去問', data.year);
+      } catch (err: any) {
+        console.error(err);
+        setError('画像のPDF結合に失敗しました: ' + (err.message || ''));
+        setIsUploading(false);
+        setUploadStatus('');
+        return;
+      }
     }
 
     if (filteredCourses.length > 0 && selectedCourseIds.length === 0) {
       setError('少なくとも1つの対象コースを選択してください。');
+      setIsUploading(false);
+      setUploadStatus('');
       return;
     }
 
     setIsUploading(true);
     setError('');
+    setUploadStatus('ファイルをアップロード中...');
 
     try {
       const supabase = createClient();
-      // 保存やStorageパスに使うためのSubject IDを決定（新規科目の場合はここでUUIDを採番）
       const targetSubjectId = data.subjectId === 'new' ? crypto.randomUUID() : data.subjectId;
-      const fileExt = file.name.split('.').pop() || '';
-      const fileName = `${crypto.randomUUID()}${fileExt ? `.${fileExt}` : ''}`;
+      const fileExt = finalFile.name.split('.').pop() || 'pdf';
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
       const filePath = `${targetSubjectId}/${fileName}`;
 
-      // クライアント側から直接Supabase Storageにアップロード（Vercel上限を回避）
+      // クライアント側から直接Supabase Storageにアップロード
       const { error: uploadError } = await supabase.storage
         .from('exams')
-        .upload(filePath, file);
+        .upload(filePath, finalFile);
 
       if (uploadError) {
         throw new Error(`ファイルのアップロードに失敗しました: ${uploadError.message}`);
       }
+
+      setUploadStatus('データベースに登録中...');
 
       // DBにメタデータを保存 (Server Action実行)
       const result = await saveExamData({
         ...data,
         targetSubjectId,
         fileUrl: filePath,
-        fileName: file.name,
+        fileName: finalFile.name,
       });
 
       // 完了後、アップロードした科目のページへリダイレクト
@@ -132,6 +276,7 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
       console.error(err);
       setError(err.message || '予期せぬエラーが発生しました');
       setIsUploading(false);
+      setUploadStatus('');
     }
   };
 
@@ -287,21 +432,132 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
             {errors.comment && <p className="text-sm text-red-500">{errors.comment.message}</p>}
           </div>
 
-          <div className="space-y-2 pt-2">
-            <Label>ファイル</Label>
-            <div className="border border-dashed border-slate-300 rounded-lg p-4 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer relative">
-              <Input
-                type="file"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <div className="text-center">
-                <p className="text-sm text-slate-600">
-                  {file ? <span className="font-medium text-slate-900">{file.name}</span> : 'クリックまたはドラッグ＆ドロップで選択'}
-                </p>
-                <p className="text-xs text-slate-400 mt-1">PDF または 画像ファイル</p>
-              </div>
+          <div className="space-y-3 pt-2">
+            <Label>過去問ファイル</Label>
+            <div className="flex gap-2 p-1 bg-slate-100 rounded-lg w-fit text-sm">
+              <button
+                type="button"
+                onClick={() => setUploadMode('pdf')}
+                className={`px-3 py-1.5 rounded-md font-semibold cursor-pointer transition-all ${
+                  uploadMode === 'pdf' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                PDFファイルをアップロード
+              </button>
+              <button
+                type="button"
+                onClick={() => setUploadMode('images')}
+                className={`px-3 py-1.5 rounded-md font-semibold cursor-pointer transition-all ${
+                  uploadMode === 'images' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                複数画像からPDFを生成
+              </button>
             </div>
+
+            {uploadMode === 'pdf' ? (
+              <div className="border border-dashed border-slate-300 rounded-lg p-6 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer relative flex flex-col items-center justify-center min-h-[120px]">
+                <Input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <div className="text-center">
+                  <p className="text-sm text-slate-600">
+                    {pdfFile ? <span className="font-medium text-slate-900">{pdfFile.name}</span> : 'クリックまたはドラッグ＆ドロップでPDFを選択'}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1.5">PDFファイルのみ</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="border border-dashed border-slate-300 rounded-lg p-6 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer relative flex flex-col items-center justify-center min-h-[120px]">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="text-center">
+                    <p className="text-sm text-slate-600">
+                      クリックまたはドラッグ＆ドロップで画像を追加
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1.5">複数選択可 (JPEG, PNG等)</p>
+                  </div>
+                </div>
+
+                {imageFiles.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-semibold text-slate-700">選択された画像 ({imageFiles.length}枚)</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          imageFiles.forEach(img => URL.revokeObjectURL(img.previewUrl));
+                          setImageFiles([]);
+                        }}
+                        className="text-xs text-red-500 hover:text-red-700 font-medium cursor-pointer"
+                      >
+                        すべてクリア
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                      {imageFiles.map((img, index) => (
+                        <div key={img.id} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-white p-2 shadow-sm flex flex-col justify-between">
+                          <div className="aspect-[3/4] relative w-full bg-slate-100 rounded-md overflow-hidden flex items-center justify-center">
+                            <img
+                              src={img.previewUrl}
+                              alt={`ページ ${index + 1}`}
+                              className="object-contain w-full h-full"
+                            />
+                            <div className="absolute top-1 left-1 bg-slate-900/70 text-white text-xs px-2 py-0.5 rounded font-bold">
+                              {index + 1} ページ
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-center mt-2 gap-1">
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                disabled={index === 0}
+                                onClick={() => handleMoveImage(index, 'left')}
+                                className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-slate-100 text-slate-700 cursor-pointer"
+                                title="前に移動"
+                              >
+                                <ArrowLeft className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={index === imageFiles.length - 1}
+                                onClick={() => handleMoveImage(index, 'right')}
+                                className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-slate-100 text-slate-700 cursor-pointer"
+                                title="後ろに移動"
+                              >
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(img.id)}
+                              className="p-1 rounded bg-red-50 hover:bg-red-100 text-red-600 cursor-pointer"
+                              title="削除"
+                            >
+                              <Trash className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      ※左から右、上から下の順番でPDFのページになります。矢印ボタンで順番を変更できます。
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2 pt-2">
@@ -326,8 +582,9 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
             </div>
           )}
 
-          <Button type="submit" disabled={isUploading} className="w-full mt-4 h-11 text-base font-bold">
-            {isUploading ? 'アップロード中...' : 'アップロードを完了する'}
+          <Button type="submit" disabled={isUploading} className="w-full mt-4 h-11 text-base font-bold cursor-pointer flex items-center justify-center gap-2">
+            {isUploading && <Loader2 className="w-5 h-5 animate-spin" />}
+            {isUploading ? (uploadStatus || '処理中...') : 'アップロードを完了する'}
           </Button>
         </form>
       </CardContent>

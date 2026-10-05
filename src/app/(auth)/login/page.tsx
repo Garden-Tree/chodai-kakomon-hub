@@ -47,14 +47,14 @@ export default function LoginPage() {
       }
 
       setStatus('success');
-    } catch (err: any) {
-      setErrorMessage(err.message);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
       setStatus('error');
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
       <Card className="w-full max-w-md border-slate-200">
         <CardHeader>
           <CardTitle className="text-xl font-bold">アップロード用ログイン</CardTitle>

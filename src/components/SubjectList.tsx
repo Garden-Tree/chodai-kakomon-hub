@@ -41,6 +41,7 @@ export function SubjectList({ subjects, courses }: Props) {
         <div className="flex flex-wrap gap-2 pb-2 border-b border-slate-100">
           <button
             onClick={() => setSelectedCourseId(null)}
+            aria-pressed={selectedCourseId === null}
             className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
               selectedCourseId === null
                 ? 'bg-slate-900 text-white shadow-sm'
@@ -56,6 +57,7 @@ export function SubjectList({ subjects, courses }: Props) {
               <button
                 key={course.id}
                 onClick={() => setSelectedCourseId(course.id)}
+                aria-pressed={selectedCourseId === course.id}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
                   selectedCourseId === course.id
                     ? 'bg-slate-900 text-white shadow-sm'

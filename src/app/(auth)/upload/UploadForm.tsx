@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -18,7 +18,11 @@ const formSchema = z.object({
   facultyId: z.string().min(1, '学部を選択してください'),
   subjectId: z.string().min(1, '科目を選択してください'),
   newSubjectName: z.string().optional(),
-  year: z.number().int().min(1900, '正しい年を入力してください'),
+  year: z
+    .number({ error: '開講年度を入力してください' })
+    .int('正しい年を入力してください')
+    .min(1900, '正しい年を入力してください')
+    .max(new Date().getFullYear(), `${new Date().getFullYear()}年以前の年度を入力してください`),
   instructor: z.string().min(1, '担当教員を入力してください'),
   comment: z.string().max(1000, '備考・メモは1000文字以内で入力してください').optional(),
   courseIds: z.array(z.string()).optional(),
@@ -44,62 +48,96 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
+// ファイルサイズの上限（PDF・結合後のPDF共通）
+const MAX_FILE_SIZE_MB = 20;
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+// 画像の長辺の最大ピクセル数（メモリ使用量の抑制）
+const MAX_IMAGE_DIMENSION = 2000;
+
+// PDFページの余白 (mm)
+const PAGE_MARGIN = 5;
+
+// 画像ファイルをHTMLImageElementとして読み込む
+const loadImage = (file: File): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new window.Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(
+        new Error(
+          `「${file.name}」を読み込めませんでした。HEICなど一部の形式には対応していません。JPEGまたはPNG形式に変換してもう一度お試しください。`
+        )
+      );
+    };
+    image.src = url;
+  });
+
 // 画像ファイルをブラウザ上で結合して1つのPDFを生成するヘルパー関数
 const compileImagesToPdf = async (
-  imageFiles: { file: File }[], 
-  subjectName: string, 
-  year: number
+  imageFiles: { file: File }[],
+  subjectName: string,
+  year: number,
+  onProgress?: (current: number, total: number) => void
 ): Promise<File> => {
   const { jsPDF } = await import('jspdf');
 
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
+  const A4_SHORT = 210;
+  const A4_LONG = 297;
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
+  let doc: InstanceType<typeof jsPDF> | null = null;
 
   for (let i = 0; i < imageFiles.length; i++) {
     const file = imageFiles[i].file;
+    onProgress?.(i + 1, imageFiles.length);
 
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const image = new window.Image();
-      image.onload = () => resolve(image);
-      image.onerror = reject;
-      image.src = dataUrl;
-    });
-
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas context could not be created');
-    ctx.drawImage(img, 0, 0);
-    const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-
-    if (i > 0) {
-      doc.addPage();
+    const img = await loadImage(file);
+    const srcWidth = img.naturalWidth || img.width;
+    const srcHeight = img.naturalHeight || img.height;
+    if (!srcWidth || !srcHeight) {
+      throw new Error(`「${file.name}」のサイズを取得できませんでした。別の画像でお試しください。`);
     }
 
-    const imgWidth = img.width;
-    const imgHeight = img.height;
-    const aspectRatio = imgWidth / imgHeight;
+    // 長辺が上限を超える場合は縮小
+    const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(srcWidth, srcHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(srcWidth * scale));
+    canvas.height = Math.max(1, Math.round(srcHeight * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas context could not be created');
+    // 透過PNGが黒くならないよう白で塗りつぶす
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const aspectRatio = canvas.width / canvas.height;
+    // メモリ解放
+    canvas.width = 0;
+    canvas.height = 0;
 
-    let printWidth = pageWidth;
-    let printHeight = pageWidth / aspectRatio;
+    // 画像の向きに合わせてページの向きを決定
+    const orientation = srcWidth > srcHeight ? 'landscape' : 'portrait';
+    if (!doc) {
+      doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+    } else {
+      doc.addPage('a4', orientation);
+    }
 
-    if (printHeight > pageHeight) {
-      printHeight = pageHeight;
-      printWidth = pageHeight * aspectRatio;
+    const pageWidth = orientation === 'landscape' ? A4_LONG : A4_SHORT;
+    const pageHeight = orientation === 'landscape' ? A4_SHORT : A4_LONG;
+    const maxWidth = pageWidth - PAGE_MARGIN * 2;
+    const maxHeight = pageHeight - PAGE_MARGIN * 2;
+
+    let printWidth = maxWidth;
+    let printHeight = maxWidth / aspectRatio;
+    if (printHeight > maxHeight) {
+      printHeight = maxHeight;
+      printWidth = maxHeight * aspectRatio;
     }
 
     const x = (pageWidth - printWidth) / 2;
@@ -108,6 +146,8 @@ const compileImagesToPdf = async (
     doc.addImage(jpegDataUrl, 'JPEG', x, y, printWidth, printHeight, undefined, 'FAST');
   }
 
+  if (!doc) throw new Error('画像が選択されていません');
+
   const pdfBlob = doc.output('blob');
   const cleanSubjectName = subjectName ? subjectName.replace(/[\\/:*?"<>|]/g, '_') : 'past_exam';
   const customFileName = `${cleanSubjectName}_${year}年度_過去問.pdf`;
@@ -115,7 +155,13 @@ const compileImagesToPdf = async (
   return new File([pdfBlob], customFileName, { type: 'application/pdf' });
 };
 
-export function UploadForm({ subjects, faculties, courses }: { subjects: any[], faculties: any[], courses: any[] }) {
+const getErrorMessage = (err: unknown): string => (err instanceof Error ? err.message : '');
+
+type Faculty = { id: string; name: string };
+type SubjectOption = { id: string; name: string; facultyId: string };
+type CourseOption = { id: string; name: string; facultyId: string };
+
+export function UploadForm({ subjects, faculties, courses }: { subjects: SubjectOption[], faculties: Faculty[], courses: CourseOption[] }) {
   const router = useRouter();
   
   // ファイルアップロード関連状態
@@ -150,12 +196,27 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
     setValue('courseIds', courseIdsOfFaculty);
   }, [facultyIdValue, setValue, courses]);
 
-  // 画像プレビュー用URLのクリーンアップ
+  // 画像プレビュー用URLのクリーンアップ（アンマウント時に残っているURLのみ解放）
+  const imageFilesRef = useRef(imageFiles);
+  useEffect(() => {
+    imageFilesRef.current = imageFiles;
+  }, [imageFiles]);
   useEffect(() => {
     return () => {
-      imageFiles.forEach(img => URL.revokeObjectURL(img.previewUrl));
+      imageFilesRef.current.forEach(img => URL.revokeObjectURL(img.previewUrl));
     };
-  }, [imageFiles]);
+  }, []);
+
+  // アップロード中のページ離脱を警告
+  useEffect(() => {
+    if (!isUploading) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isUploading]);
 
   // 選択された学部の科目・コースを抽出
   const filteredSubjects = subjects.filter(s => s.facultyId === facultyIdValue);
@@ -170,6 +231,18 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
     }
   };
 
+  const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (file && file.size > MAX_FILE_SIZE) {
+      setPdfFile(null);
+      e.target.value = '';
+      setError(`ファイルサイズが大きすぎます（上限 ${MAX_FILE_SIZE_MB}MB）。`);
+      return;
+    }
+    setError('');
+    setPdfFile(file);
+  };
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     const newImages = selectedFiles.map(file => ({
@@ -181,13 +254,11 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
   };
 
   const handleRemoveImage = (id: string) => {
-    setImageFiles(prev => {
-      const target = prev.find(img => img.id === id);
-      if (target) {
-        URL.revokeObjectURL(target.previewUrl);
-      }
-      return prev.filter(img => img.id !== id);
-    });
+    const target = imageFiles.find(img => img.id === id);
+    if (target) {
+      URL.revokeObjectURL(target.previewUrl);
+    }
+    setImageFiles(prev => prev.filter(img => img.id !== id));
   };
 
   const handleMoveImage = (index: number, direction: 'left' | 'right') => {
@@ -210,6 +281,10 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
         setError('PDFファイルを選択してください');
         return;
       }
+      if (pdfFile.size > MAX_FILE_SIZE) {
+        setError(`ファイルサイズが大きすぎます（上限 ${MAX_FILE_SIZE_MB}MB）。`);
+        return;
+      }
       finalFile = pdfFile;
     } else {
       if (imageFiles.length === 0) {
@@ -222,14 +297,26 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
       try {
         const selectedSubject = subjects.find(s => s.id === data.subjectId);
         const subjectName = data.subjectId === 'new' ? data.newSubjectName : selectedSubject?.name;
-        finalFile = await compileImagesToPdf(imageFiles, subjectName || '過去問', data.year);
-      } catch (err: any) {
+        finalFile = await compileImagesToPdf(
+          imageFiles,
+          subjectName || '過去問',
+          data.year,
+          (current, total) => setUploadStatus(`画像を結合中... (${current}/${total})`)
+        );
+      } catch (err) {
         console.error(err);
-        setError('画像のPDF結合に失敗しました: ' + (err.message || ''));
+        setError(getErrorMessage(err) || '画像のPDF結合に失敗しました。画像の形式を確認してもう一度お試しください。');
         setIsUploading(false);
         setUploadStatus('');
         return;
       }
+    }
+
+    if (finalFile.size > MAX_FILE_SIZE) {
+      setError(`生成されたPDFのサイズが大きすぎます（上限 ${MAX_FILE_SIZE_MB}MB）。画像の枚数を減らしてお試しください。`);
+      setIsUploading(false);
+      setUploadStatus('');
+      return;
     }
 
     if (filteredCourses.length > 0 && selectedCourseIds.length === 0) {
@@ -242,6 +329,12 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
     setIsUploading(true);
     setError('');
     setUploadStatus('ファイルをアップロード中...');
+
+    const showError = (message: string) => {
+      setError(message);
+      setIsUploading(false);
+      setUploadStatus('');
+    };
 
     try {
       const supabase = createClient();
@@ -256,7 +349,9 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
         .upload(filePath, finalFile);
 
       if (uploadError) {
-        throw new Error(`ファイルのアップロードに失敗しました: ${uploadError.message}`);
+        console.error(uploadError);
+        showError(`ファイルのアップロードに失敗しました: ${uploadError.message}`);
+        return;
       }
 
       setUploadStatus('データベースに登録中...');
@@ -269,14 +364,18 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
         fileName: finalFile.name,
       });
 
-      // 完了後、アップロードした科目のページへリダイレクト
-      router.push(`/subject/${result.subjectId}`);
+      if (!result.ok) {
+        showError(result.message);
+        return;
+      }
 
-    } catch (err: any) {
+      // 完了後、アップロードした科目のページへリダイレクト
+      router.push(`/subject/${result.data.subjectId}?uploaded=1`);
+
+    } catch (err) {
+      // 通信エラーなど、Server Action が結果を返せなかった場合
       console.error(err);
-      setError(err.message || '予期せぬエラーが発生しました');
-      setIsUploading(false);
-      setUploadStatus('');
+      showError('通信エラーが発生しました。通信環境を確認して再度お試しください。');
     }
   };
 
@@ -455,19 +554,23 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
               </button>
             </div>
 
+            <p className="text-xs text-slate-500">
+              ファイルサイズの上限は{MAX_FILE_SIZE_MB}MBです（画像から生成する場合は、生成後のPDFが対象です）。
+            </p>
+
             {uploadMode === 'pdf' ? (
               <div className="border border-dashed border-slate-300 rounded-lg p-6 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer relative flex flex-col items-center justify-center min-h-[120px]">
                 <Input
                   type="file"
                   accept="application/pdf"
-                  onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                  onChange={handlePdfChange}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 />
                 <div className="text-center">
                   <p className="text-sm text-slate-600">
                     {pdfFile ? <span className="font-medium text-slate-900">{pdfFile.name}</span> : 'クリックまたはドラッグ＆ドロップでPDFを選択'}
                   </p>
-                  <p className="text-xs text-slate-400 mt-1.5">PDFファイルのみ</p>
+                  <p className="text-xs text-slate-400 mt-1.5">PDFファイルのみ（{MAX_FILE_SIZE_MB}MBまで）</p>
                 </div>
               </div>
             ) : (
@@ -484,7 +587,7 @@ export function UploadForm({ subjects, faculties, courses }: { subjects: any[], 
                     <p className="text-sm text-slate-600">
                       クリックまたはドラッグ＆ドロップで画像を追加
                     </p>
-                    <p className="text-xs text-slate-400 mt-1.5">複数選択可 (JPEG, PNG等)</p>
+                    <p className="text-xs text-slate-400 mt-1.5">複数選択可 (JPEG, PNG等 / HEIC非対応)</p>
                   </div>
                 </div>
 

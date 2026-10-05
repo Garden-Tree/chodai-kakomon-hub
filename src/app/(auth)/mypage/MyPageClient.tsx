@@ -1,15 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { updateExamData, deleteExamData } from '@/app/actions/upload';
-import { Calendar, User, MessageSquare, Edit2, Trash2, Eye, Download, BookOpen, X } from 'lucide-react';
+import { Calendar, User, MessageSquare, Edit2, Trash2, Eye, Download, BookOpen, X, CheckCircle, AlertTriangle } from 'lucide-react';
 
 type Course = {
   id: string;
@@ -26,6 +26,8 @@ type Exam = {
   fileName: string | null;
   uploadedBy: string;
   comment: string | null;
+  isHidden: boolean;
+  hiddenReason: string | null;
   createdAt: Date | string;
   subject: {
     id: string;
@@ -51,9 +53,16 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  // 開講年度の入力欄の下に表示するエラー
+  const [yearError, setYearError] = useState('');
+  // 担当教員の入力欄の下に表示するエラー
+  const [instructorError, setInstructorError] = useState('');
+  // 一覧上部に表示する結果メッセージ（数秒で自動的に消える）
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const titleId = useId();
 
-  // 編集モーダルのフォーム入力状態
-  const [editYear, setEditYear] = useState<number>(new Date().getFullYear());
+  // 編集モーダルのフォーム入力状態（年は入力途中の状態を保つため文字列で保持し、送信時に検証する）
+  const [editYear, setEditYear] = useState<string>(String(new Date().getFullYear()));
   const [editInstructor, setEditInstructor] = useState('');
   const [editComment, setEditComment] = useState('');
   const [editCourseIds, setEditCourseIds] = useState<string[]>([]);
@@ -61,18 +70,45 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
   // 編集開始
   const handleStartEdit = (exam: Exam) => {
     setEditingExam(exam);
-    setEditYear(exam.year);
+    setEditYear(String(exam.year));
     setEditInstructor(exam.instructor);
     setEditComment(exam.comment || '');
     setEditCourseIds(exam.courses.map(c => c.id));
     setError('');
+    setYearError('');
+    setInstructorError('');
   };
 
   // 編集モーダルのキャンセル
   const handleCancelEdit = () => {
     setEditingExam(null);
     setError('');
+    setYearError('');
+    setInstructorError('');
   };
+
+  // 結果メッセージを3秒後に自動で消す
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  // Escapeキーで編集モーダルを閉じる
+  const isModalOpen = editingExam !== null;
+  useEffect(() => {
+    if (!isModalOpen || isUpdating) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setEditingExam(null);
+        setError('');
+        setYearError('');
+        setInstructorError('');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isModalOpen, isUpdating]);
 
   // 選択している学部のコースリストを抽出
   const facultyId = editingExam?.subject.facultyId;
@@ -104,6 +140,25 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
     e.preventDefault();
     if (!editingExam) return;
 
+    const currentYear = new Date().getFullYear();
+    const trimmedYear = editYear.trim();
+    const parsedYear = Number(trimmedYear);
+    if (!trimmedYear) {
+      setYearError('開講年度を入力してください。');
+      return;
+    }
+    if (!Number.isInteger(parsedYear) || parsedYear < 1900 || parsedYear > currentYear) {
+      setYearError(`開講年度は1900〜${currentYear}の整数で入力してください。`);
+      return;
+    }
+    setYearError('');
+
+    if (!editInstructor.trim()) {
+      setInstructorError('担当教員を入力してください。');
+      return;
+    }
+    setInstructorError('');
+
     if (filteredCourses.length > 0 && editCourseIds.length === 0) {
       setError('少なくとも1つの対象コースを選択してください。');
       return;
@@ -113,19 +168,26 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
     setError('');
 
     try {
-      await updateExamData({
+      const result = await updateExamData({
         examId: editingExam.id,
-        year: editYear,
+        year: parsedYear,
         instructor: editInstructor,
         comment: editComment,
         courseIds: editCourseIds,
       });
 
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+
       setEditingExam(null);
+      setNotice({ type: 'success', text: '更新しました' });
       router.refresh();
-    } catch (err: any) {
+    } catch (err) {
+      // 通信エラーなど、Server Action が結果を返せなかった場合
       console.error(err);
-      setError(err.message || '更新中にエラーが発生しました');
+      setError('更新中にエラーが発生しました。通信環境を確認して再度お試しください。');
     } finally {
       setIsUpdating(false);
     }
@@ -138,12 +200,21 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
     }
 
     setDeletingId(examId);
+    setNotice(null);
     try {
-      await deleteExamData(examId);
+      const result = await deleteExamData(examId);
+
+      if (!result.ok) {
+        setNotice({ type: 'error', text: result.message });
+        return;
+      }
+
+      setNotice({ type: 'success', text: '削除しました' });
       router.refresh();
-    } catch (err: any) {
+    } catch (err) {
+      // 通信エラーなど、Server Action が結果を返せなかった場合
       console.error(err);
-      alert(err.message || '削除中にエラーが発生しました');
+      setNotice({ type: 'error', text: '削除中にエラーが発生しました。通信環境を確認して再度お試しください。' });
     } finally {
       setDeletingId(null);
     }
@@ -168,6 +239,24 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
 
       <div className="space-y-4">
         <h2 className="text-xl font-bold text-slate-800 border-b pb-2">アップロード済みの過去問 ({exams.length}件)</h2>
+
+        {notice && (
+          <div
+            role={notice.type === 'error' ? 'alert' : 'status'}
+            className={`flex items-start gap-2 p-3 rounded-md text-sm border ${
+              notice.type === 'success'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                : 'bg-red-50 text-red-600 border-red-100'
+            }`}
+          >
+            {notice.type === 'success' ? (
+              <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            )}
+            <span>{notice.text}</span>
+          </div>
+        )}
 
         {exams.length === 0 ? (
           <Card className="border-slate-200 shadow-sm bg-white py-12 text-center">
@@ -202,12 +291,23 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
 
                     <h3 className="text-base font-semibold text-slate-700">{exam.year}年度</h3>
 
+                    {exam.isHidden && (
+                      <div className="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+                        <span className="inline-flex items-center rounded bg-red-100 px-2 py-0.5 text-xs font-semibold">
+                          非公開（運営により非表示）
+                        </span>
+                        {exam.hiddenReason && (
+                          <p className="mt-1 text-xs leading-relaxed whitespace-pre-wrap">理由: {exam.hiddenReason}</p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="text-sm text-slate-500 flex gap-4 flex-wrap items-center">
                       <span className="flex items-center gap-1">
                         <User className="w-3.5 h-3.5" /> 担当: <span className="text-slate-700 font-medium">{exam.instructor}</span>
                       </span>
                       <span className="flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" /> アップロード日付: {new Date(exam.createdAt).toLocaleDateString('ja-JP')}
+                        <Calendar className="w-3.5 h-3.5" /> アップロード日付: {new Date(exam.createdAt).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}
                       </span>
                     </div>
 
@@ -286,21 +386,27 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
       {/* 編集モーダル */}
       {editingExam && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
-          <Card className="bg-white rounded-lg max-w-lg w-full p-6 shadow-xl relative animate-in zoom-in-95 duration-200 overflow-y-auto max-h-[90vh]">
-            <button 
-              type="button" 
-              onClick={handleCancelEdit} 
+          <Card
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            className="bg-white rounded-lg max-w-lg w-full p-6 shadow-xl relative animate-in zoom-in-95 duration-200 overflow-y-auto max-h-[90vh]"
+          >
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              aria-label="閉じる"
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
             <CardHeader className="p-0 pb-4 mb-4 border-b">
-              <CardTitle className="text-xl">過去問情報の編集</CardTitle>
+              <CardTitle id={titleId} className="text-xl">過去問情報の編集</CardTitle>
               <CardDescription>
                 科目の登録情報（{editingExam.subject.name}）を編集します。
               </CardDescription>
             </CardHeader>
-            <form onSubmit={handleSaveEdit} className="space-y-4">
+            <form onSubmit={handleSaveEdit} noValidate className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="edit-year">開講年度</Label>
@@ -308,9 +414,17 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
                     id="edit-year"
                     type="number"
                     value={editYear}
-                    onChange={(e) => setEditYear(parseInt(e.target.value) || new Date().getFullYear())}
+                    onChange={(e) => {
+                      setEditYear(e.target.value);
+                      if (yearError) setYearError('');
+                    }}
                     required
+                    aria-invalid={yearError ? true : undefined}
+                    aria-describedby={yearError ? 'edit-year-error' : undefined}
                   />
+                  {yearError && (
+                    <p id="edit-year-error" role="alert" className="text-sm text-red-500">{yearError}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-instructor">担当教員</Label>
@@ -318,9 +432,17 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
                     id="edit-instructor"
                     type="text"
                     value={editInstructor}
-                    onChange={(e) => setEditInstructor(e.target.value)}
+                    onChange={(e) => {
+                      setEditInstructor(e.target.value);
+                      if (instructorError) setInstructorError('');
+                    }}
                     required
+                    aria-invalid={instructorError ? true : undefined}
+                    aria-describedby={instructorError ? 'edit-instructor-error' : undefined}
                   />
+                  {instructorError && (
+                    <p id="edit-instructor-error" role="alert" className="text-sm text-red-500">{instructorError}</p>
+                  )}
                 </div>
               </div>
 

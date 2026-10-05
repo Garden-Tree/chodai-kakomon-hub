@@ -9,7 +9,7 @@ type Props = {
 
 export default async function TopPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const query = typeof sp.q === 'string' ? sp.q : '';
+  const query = typeof sp.q === 'string' ? sp.q.trim() : '';
   
   // 学部ごとに科目を検索して取得
   const faculties = await prisma.faculty.findMany({
@@ -21,6 +21,7 @@ export default async function TopPage({ searchParams }: Props) {
         where: {
           name: {
             contains: query,
+            mode: 'insensitive',
           }
         },
         include: {
@@ -31,6 +32,11 @@ export default async function TopPage({ searchParams }: Props) {
     },
     orderBy: { createdAt: 'asc' }
   });
+
+  const hasNoMatch = query !== '' && faculties.every(f => f.subjects.length === 0);
+
+  // 検索中は、一致する科目がない学部を表示しない（コース絞り込みのピルだけが並ぶのを防ぐ）
+  const visibleFaculties = query !== '' ? faculties.filter(f => f.subjects.length > 0) : faculties;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -53,8 +59,13 @@ export default async function TopPage({ searchParams }: Props) {
       </div>
 
       <div className="space-y-4">
+        {hasNoMatch && (
+          <p className="text-slate-500 text-sm py-8 text-center bg-white rounded-lg border border-dashed border-slate-200">
+            「{query}」に一致する科目はありません
+          </p>
+        )}
         <AccordionRoot>
-          {faculties.map(faculty => (
+          {visibleFaculties.map(faculty => (
             <AccordionItem key={faculty.id} value={faculty.id}>
               <AccordionTrigger value={faculty.id}>
                 <span className="flex items-center gap-2">

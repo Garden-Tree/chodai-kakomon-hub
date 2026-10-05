@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
+import { getSitePassword } from '@/lib/site-password';
 
 export async function proxy(request: NextRequest) {
   // まずSupabaseのセッションクッキーの期限切れをチェックし、必要ならリフレッシュ処理を行う
   const response = await updateSession(request);
 
-  // 環境変数に設定された簡易パスワード
-  const expectedPassword = process.env.SITE_COMMON_PASSWORD || 'your_common_password_here';
+  // 環境変数に設定された簡易パスワード（未設定・プレースホルダーの場合は例外）
+  const expectedPassword = getSitePassword();
   const providedPassword = request.cookies.get('site_common_password')?.value;
 
   // 正しいパスワードがCookieに保存されていればアクセス許可
@@ -38,7 +39,7 @@ export async function proxy(request: NextRequest) {
   
   // セッション更新によって付与されたクッキーを、リダイレクト時のレスポンスにも引き継ぐ
   response.cookies.getAll().forEach((c) => {
-    redirectResponse.cookies.set(c.name, c.value, c as any);
+    redirectResponse.cookies.set(c);
   });
   
   return redirectResponse;

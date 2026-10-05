@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
+  provider = "postgresql"
 }
 
 // 学部
@@ -18,7 +18,7 @@ model Faculty {
 // コース（専攻）
 model Course {
   id        String    @id @default(dbgenerated("gen_random_uuid()::text"))
-  name      String    // 例: インフォメーションサイエンスコース（IS）
+  name      String // 例: インフォメーションサイエンスコース（IS）
   faculty   Faculty   @relation(fields: [facultyId], references: [id])
   facultyId String
   subjects  Subject[]
@@ -31,7 +31,7 @@ model Course {
 // 授業（科目）
 model Subject {
   id        String   @id @default(dbgenerated("gen_random_uuid()::text"))
-  name      String   // 例: 線形代数学I
+  name      String // 例: 線形代数学I
   faculty   Faculty  @relation(fields: [facultyId], references: [id])
   facultyId String
   exams     Exam[]
@@ -43,31 +43,45 @@ model Subject {
 
 // 過去問データ
 model Exam {
-  id          String   @id @default(dbgenerated("gen_random_uuid()::text"))
-  subject     Subject  @relation(fields: [subjectId], references: [id])
-  subjectId   String
-  year        Int      // 開講年度 (例: 2024)
-  instructor  String   // 担当教員名
-  fileUrl     String   // Supabase Storage上のパス
-  fileName    String?  // 元のファイル名を追加
-  uploadedBy  String   // アップロード者のac.jpメールアドレス
-  comment     String?  // 備考・メモ
-  courses     Course[]
-  reports     Report[]
-  createdAt   DateTime @default(now())
+  id           String   @id @default(dbgenerated("gen_random_uuid()::text"))
+  subject      Subject  @relation(fields: [subjectId], references: [id])
+  subjectId    String
+  year         Int // 開講年度 (例: 2024)
+  instructor   String // 担当教員名
+  fileUrl      String // Supabase Storage上のパス
+  fileName     String? // 元のファイル名を追加
+  uploadedBy   String // アップロード者のac.jpメールアドレス
+  comment      String? // 備考・メモ
+  isHidden     Boolean  @default(false) // 非公開フラグ（運営が不適切と判断した場合に true）
+  hiddenReason String? // 非公開にした理由（アップロード者にも表示）
+  courses      Course[]
+  reports      Report[]
+  createdAt    DateTime @default(now())
 
   @@index([subjectId, year(sort: Desc)]) // 授業ページでの年度降順ソート用インデックス
 }
 
+// 通報の対応状況
+enum ReportStatus {
+  PENDING // 未対応
+  RESOLVED // 対応済み（過去問を非公開にした等）
+  DISMISSED // 却下
+}
+
 // 通報・削除申請データ
 model Report {
-  id          String   @id @default(dbgenerated("gen_random_uuid()::text"))
-  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
-  examId      String
-  reason      String   // 通報理由
-  details     String?  // 補足説明
-  reportedBy  String   // 通報者のメールアドレス
-  createdAt   DateTime @default(now())
+  id         String       @id @default(dbgenerated("gen_random_uuid()::text"))
+  exam       Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  examId     String
+  reason     String // 通報理由
+  details    String? // 補足説明
+  reportedBy String // 通報者のメールアドレス
+  status     ReportStatus @default(PENDING) // 対応状況
+  resolvedAt DateTime? // 対応（解決・却下）した日時
+  resolvedBy String? // 対応した管理者のメールアドレス
+  createdAt  DateTime     @default(now())
 
+  @@unique([examId, reportedBy]) // 同一ユーザーによる同一過去問への重複通報を防ぐ制約
   @@index([examId])
+  @@index([status])
 }

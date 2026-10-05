@@ -43,6 +43,15 @@
    # Supabaseキー情報
    NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
    NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
+   # サービスロールキー（サーバー専用・必須。絶対に公開しないこと）
+   SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+
+   # サイト閲覧用の学内共通パスワード（必須）
+   # 未設定、またはプレースホルダー値 your_common_password_here のままだとエラーになります
+   SITE_COMMON_PASSWORD="change-me-to-a-strong-password"
+
+   # 管理者のメールアドレス（任意・カンマ区切り）。通報の確認や過去問の非公開化/削除ができます
+   ADMIN_EMAILS="admin1@example.ac.jp,admin2@example.ac.jp"
    ```
 
 4. データベースの初期設定・マイグレーションを実行します。

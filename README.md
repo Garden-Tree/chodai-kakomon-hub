@@ -52,6 +52,8 @@
 
    # 管理者のメールアドレス（任意・カンマ区切り）。通報の確認や過去問の非公開化/削除ができます
    ADMIN_EMAILS="admin1@example.ac.jp,admin2@example.ac.jp"
+   # 任意: Supabase 自動停止防止 Cron の認証用（Vercel に設定）
+   CRON_SECRET="ランダムな長い文字列"
    ```
 
 4. データベースの初期設定・マイグレーションを実行します。

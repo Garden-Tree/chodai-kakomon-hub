@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAdminUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { AdminNav } from '../AdminNav';
 import { ExamActions, DismissReportButton } from './ReportActions';
 
 type Props = {
@@ -64,6 +65,8 @@ export default async function AdminReportsPage({ searchParams }: Props) {
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6">
+      <AdminNav />
+
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">通報の管理</h1>
         <p className="text-sm text-slate-500 mt-1">ログイン中: {admin.email}</p>

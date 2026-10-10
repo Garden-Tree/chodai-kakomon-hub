@@ -76,6 +76,9 @@ src/
 | `DIRECT_URL` | マイグレーション時など直接DBへ接続するURL。Supabaseを使う場合はSession Pooler (port 5432) のURLを使用 |
 | `NEXT_PUBLIC_SUPABASE_URL` | SupabaseプロジェクトのURL（公開可） |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabaseの匿名キー（公開可、RLSで保護） |
+| `SUPABASE_SERVICE_ROLE_KEY` | **必須**。Supabaseのサービスロールキー（サーバー専用）。ダウンロード用Signed URLの発行、アップロード済みファイルの存在確認・削除に使用。RLSをバイパスできるため絶対に公開しないこと |
+| `SITE_COMMON_PASSWORD` | **必須**。サイト閲覧用の学内共通簡易パスワード。未設定、またはプレースホルダー値 `your_common_password_here` のままだとエラーになるため、推測されにくい値を設定すること |
+| `ADMIN_EMAILS` | 任意。管理者のメールアドレス（カンマ区切り、大文字小文字は区別しない）。該当ユーザーは `/admin/reports` で通報の確認、過去問の非公開化・公開復帰・削除ができる。未設定の場合は管理者なし |
 
 > [!CAUTION]
 > `.env.local` は `.gitignore` によって除外されており、絶対にコミットしないでください。
@@ -108,6 +111,15 @@ npx prisma generate
 
 # Prisma Studioの起動（DBのGUI）
 npx prisma studio
+
+# 本番DBへ未適用マイグレーションを適用
+npx prisma migrate deploy
+
+# Storage の孤児ファイル（Exam から参照されていないファイル）を一覧表示（dry run）
+node --env-file=.env scripts/cleanup-orphan-files.mjs
+
+# 孤児ファイルを削除
+node --env-file=.env scripts/cleanup-orphan-files.mjs --delete
 ```
 
 ---

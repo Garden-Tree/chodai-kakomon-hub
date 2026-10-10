@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { supabaseAdmin } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
+import { getSitePassword } from '@/lib/site-password';
+import { getUniversityUser, isAdminEmail } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
 export async function GET(
@@ -10,7 +12,7 @@ export async function GET(
 ) {
   try {
     // 1. パスワードの確認（MiddlewareでもブロックされるがAPI側でも念のため検証）
-    const expectedPassword = process.env.SITE_COMMON_PASSWORD || 'your_common_password_here';
+    const expectedPassword = getSitePassword();
     const cookieStore = await cookies();
     const providedPassword = cookieStore.get('site_common_password')?.value;
 
@@ -28,11 +30,22 @@ export async function GET(
       return new NextResponse('Exam not found', { status: 404 });
     }
 
+    // 非公開の過去問は、アップロード者本人と管理者以外には存在しないものとして扱う
+    if (exam.isHidden) {
+      const authUser = await getUniversityUser();
+      const canView = authUser !== null
+        && (authUser.email === exam.uploadedBy || isAdminEmail(authUser.email));
+
+      if (!canView) {
+        return new NextResponse('Exam not found', { status: 404 });
+      }
+    }
+
     // 3. Supabase Storage から Signed URL を生成 (期限: 60秒)
     // RLSが設定されているBucketであっても、Admin Keyを使用するためバイパス可能
     const isPreview = request.nextUrl.searchParams.get('preview') === 'true';
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await getSupabaseAdmin()
       .storage
       .from('exams')
       .createSignedUrl(exam.fileUrl, 60, {

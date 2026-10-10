@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Download, Eye, Flag, AlertTriangle, CheckCircle, X, Loader2 } from 'lucide-react';
+import { Download, Eye, Flag, AlertTriangle, CheckCircle, X, Loader2, ArrowUpDown } from 'lucide-react';
 import { createReport } from '@/app/actions/report';
 
 type Course = {
@@ -17,11 +19,10 @@ type Exam = {
   id: string;
   year: number;
   instructor: string;
-  fileUrl: string;
   fileName: string | null;
   comment: string | null;
-  uploadedBy: string;
-  createdAt: string; // Serialized ISO string
+  isHidden: boolean; // 非公開（アップロード者本人・管理者にのみ表示される）
+  createdAt: string; // サーバー側で整形済みの日付文字列
   courses: Course[];
 };
 
@@ -48,9 +49,91 @@ const REASONS = [
   'その他',
 ];
 
+// フィルタ・並び順を保持する URL クエリのパラメータ名
+const PARAM_YEAR = 'year';
+const PARAM_INSTRUCTOR = 'instructor';
+const PARAM_COURSE = 'course';
+const PARAM_SORT = 'sort'; // 'asc' のとき年度が古い順（省略時は新しい順）
+const PARAM_UPLOADED = 'uploaded'; // アップロード直後の完了バナー表示用
+const FILTER_PARAMS = [PARAM_YEAR, PARAM_INSTRUCTOR, PARAM_COURSE];
+
+// フィルタバーを表示する過去問の最小件数
+const MIN_EXAMS_FOR_FILTER = 2;
+
+const selectClassName =
+  'h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm';
+
 export function ExamList({ subject, exams, currentUserEmail }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const yearSelectId = useId();
+  const instructorSelectId = useId();
+
+  // URL クエリを更新する（null / 空文字を渡したパラメータは削除する）
+  const updateParams = (updates: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(updates)) {
+      if (value) {
+        next.set(key, value);
+      } else {
+        next.delete(key);
+      }
+    }
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+
+  // フィルタ候補（実際に存在する値のみ）
+  const yearOptions = useMemo(
+    () => Array.from(new Set(exams.map(e => e.year))).sort((a, b) => b - a),
+    [exams],
+  );
+  const instructorOptions = useMemo(
+    () => Array.from(new Set(exams.map(e => e.instructor))).sort((a, b) => a.localeCompare(b, 'ja')),
+    [exams],
+  );
+  // この科目の過去問に1件でも紐づいているコースのみを、学部のコース順で並べる
+  const courseOptions = useMemo(() => {
+    const usedCourseIds = new Set(exams.flatMap(e => e.courses.map(c => c.id)));
+    return subject.faculty.courses.filter(c => usedCourseIds.has(c.id));
+  }, [exams, subject.faculty.courses]);
+
+  const showFilters = exams.length >= MIN_EXAMS_FOR_FILTER;
+
+  // URL の値を検証する（候補にない値は「すべて」として扱う）
+  const rawYear = searchParams.get(PARAM_YEAR) ?? '';
+  const rawInstructor = searchParams.get(PARAM_INSTRUCTOR) ?? '';
+  const rawCourse = searchParams.get(PARAM_COURSE) ?? '';
+  const yearFilter = yearOptions.some(y => String(y) === rawYear) ? rawYear : '';
+  const instructorFilter = instructorOptions.includes(rawInstructor) ? rawInstructor : '';
+  const courseFilter = courseOptions.some(c => c.id === rawCourse) ? rawCourse : '';
+  const sortAsc = searchParams.get(PARAM_SORT) === 'asc';
+
+  const hasActiveFilter = showFilters && (yearFilter !== '' || instructorFilter !== '' || courseFilter !== '');
+
+  const visibleExams = useMemo(() => {
+    if (!showFilters) return exams;
+    const filtered = exams.filter(e =>
+      (!yearFilter || String(e.year) === yearFilter) &&
+      (!instructorFilter || e.instructor === instructorFilter) &&
+      (!courseFilter || e.courses.some(c => c.id === courseFilter)),
+    );
+    // sort は安定ソートなので、同じ年度内ではサーバー側の並びが保たれる
+    return [...filtered].sort((a, b) => (sortAsc ? a.year - b.year : b.year - a.year));
+  }, [exams, showFilters, yearFilter, instructorFilter, courseFilter, sortAsc]);
+
+  const clearFilters = () => {
+    updateParams(Object.fromEntries(FILTER_PARAMS.map(key => [key, null])));
+  };
+
+  // アップロード完了バナー（?uploaded=1）
+  const showUploadedBanner = searchParams.get(PARAM_UPLOADED) === '1';
+  const dismissUploadedBanner = () => updateParams({ [PARAM_UPLOADED]: null });
+
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const titleId = useId();
   
   // Form states
   const [reason, setReason] = useState('');
@@ -73,6 +156,19 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
     setSelectedExam(null);
   };
 
+  // Escapeキーでモーダルを閉じる
+  useEffect(() => {
+    if (!showModal) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isSubmitting) {
+        setShowModal(false);
+        setSelectedExam(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showModal, isSubmitting]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedExam) return;
@@ -91,13 +187,15 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
         details: details.trim() || undefined,
       });
 
-      if (result.success) {
+      if (result.ok) {
         setSubmitSuccess(true);
       } else {
-        setSubmitError('通報の送信に失敗しました。再度お試しください。');
+        setSubmitError(result.message);
       }
-    } catch (err: any) {
-      setSubmitError(err.message || '予期せぬエラーが発生しました。');
+    } catch (err) {
+      // 通信エラーなど、Server Action が結果を返せなかった場合
+      console.error(err);
+      setSubmitError('通報の送信に失敗しました。通信環境を確認して再度お試しください。');
     } finally {
       setIsSubmitting(false);
     }
@@ -105,23 +203,149 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold text-slate-800 border-b pb-2">
-        過去問一覧 ({exams.length}件)
-      </h2>
-      
+      {showUploadedBanner && (
+        <div
+          role="status"
+          className="flex items-start gap-2 p-3 rounded-md text-sm border bg-emerald-50 text-emerald-700 border-emerald-100"
+        >
+          <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span className="flex-1">アップロードが完了しました。ありがとうございます！</span>
+          <button
+            type="button"
+            onClick={dismissUploadedBanner}
+            aria-label="メッセージを閉じる"
+            className="shrink-0 rounded p-0.5 text-emerald-600 hover:bg-emerald-100 transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-baseline justify-between gap-3 border-b pb-2">
+        <h2 className="text-xl font-semibold text-slate-800">過去問一覧</h2>
+        <span className="text-sm text-slate-500" aria-live="polite">
+          {showFilters ? `${visibleExams.length}件 / 全${exams.length}件` : `${exams.length}件`}
+        </span>
+      </div>
+
+      {showFilters && (
+        <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label htmlFor={yearSelectId} className="text-xs font-semibold text-slate-600">年度</label>
+              <select
+                id={yearSelectId}
+                value={yearFilter}
+                onChange={(e) => updateParams({ [PARAM_YEAR]: e.target.value })}
+                className={selectClassName}
+              >
+                <option value="">すべて</option>
+                {yearOptions.map(y => (
+                  <option key={y} value={String(y)}>{y}年度</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor={instructorSelectId} className="text-xs font-semibold text-slate-600">担当教員</label>
+              <select
+                id={instructorSelectId}
+                value={instructorFilter}
+                onChange={(e) => updateParams({ [PARAM_INSTRUCTOR]: e.target.value })}
+                className={selectClassName}
+              >
+                <option value="">すべて</option>
+                {instructorOptions.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {courseOptions.length > 0 && (
+            <div className="space-y-1.5">
+              <span className="text-xs font-semibold text-slate-600">コース</span>
+              <div className="flex flex-wrap gap-2">
+                {[{ id: '', name: 'すべて' }, ...courseOptions].map(course => {
+                  const pressed = courseFilter === course.id;
+                  return (
+                    <button
+                      key={course.id || 'all'}
+                      type="button"
+                      onClick={() => updateParams({ [PARAM_COURSE]: course.id })}
+                      aria-pressed={pressed}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
+                        pressed
+                          ? 'bg-slate-900 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                      }`}
+                    >
+                      {course.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => updateParams({ [PARAM_SORT]: sortAsc ? null : 'asc' })}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5" />
+              並び替え: {sortAsc ? '年度が古い順' : '年度が新しい順'}
+            </button>
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-xs font-medium text-slate-500 hover:text-slate-900 underline underline-offset-2 cursor-pointer"
+              >
+                条件をクリア
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {exams.length === 0 ? (
-        <p className="text-slate-500 py-4 bg-slate-50 px-4 rounded-md">
-          この科目の過去問はまだアップロードされていません。
-        </p>
+        <div className="text-slate-500 py-6 bg-slate-50 px-4 rounded-md flex flex-col items-start gap-3">
+          <p>この科目の過去問はまだアップロードされていません。</p>
+          <Link
+            href="/upload"
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white transition-colors"
+          >
+            最初の過去問をアップロードする
+          </Link>
+        </div>
+      ) : visibleExams.length === 0 ? (
+        <div className="text-slate-500 py-6 bg-slate-50 px-4 rounded-md flex flex-col items-start gap-3">
+          <p>条件に一致する過去問はありません</p>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
+          >
+            条件をクリア
+          </button>
+        </div>
       ) : (
         <div className="grid gap-4">
-          {exams.map(exam => (
+          {visibleExams.map(exam => (
             <Card key={exam.id} className="border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-start justify-between p-5 gap-4 hover:shadow-md transition-shadow bg-white relative">
               <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-medium text-slate-900">{exam.year}年度</h3>
+                <h3 className="text-lg font-medium text-slate-900 flex items-center gap-2 flex-wrap">
+                  {exam.year}年度
+                  {exam.isHidden && (
+                    <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/20">
+                      非公開
+                    </span>
+                  )}
+                </h3>
                 <div className="text-sm text-slate-500 mt-1 flex gap-3 flex-wrap items-center">
                   <span>担当: <span className="text-slate-700">{exam.instructor}</span></span>
-                  <span>アップロード日付: {new Date(exam.createdAt).toLocaleDateString('ja-JP')}</span>
+                  <span>アップロード日付: {exam.createdAt}</span>
                   {exam.courses && exam.courses.length > 0 && (
                     <span className="inline-flex gap-1.5 flex-wrap">
                       {subject.faculty.courses.length > 0 && exam.courses.length === subject.faculty.courses.length ? (
@@ -179,15 +403,22 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
       {/* Modal Overlay */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-100 max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 relative flex flex-col max-h-[90vh]">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            className="bg-white rounded-xl shadow-xl border border-slate-100 max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 relative flex flex-col max-h-[90vh]"
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
-              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <h3 id={titleId} className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                 <Flag className="w-5 h-5 text-red-500 shrink-0" />
                 不適切なコンテンツの通報
               </h3>
               <button 
+                type="button"
                 onClick={closeModal}
+                aria-label="閉じる"
                 className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer rounded-lg p-1 hover:bg-slate-50"
               >
                 <X className="w-5 h-5" />
@@ -254,10 +485,10 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                  <fieldset className="space-y-2 border-0 p-0 m-0 min-w-0">
+                    <legend className="text-sm font-semibold text-slate-800 flex items-center gap-1.5 mb-2">
                       通報理由 <span className="text-xs text-red-500 font-normal">（必須）</span>
-                    </label>
+                    </legend>
                     <div className="grid gap-2">
                       {REASONS.map((reasonOpt) => (
                         <label
@@ -280,7 +511,7 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
                         </label>
                       ))}
                     </div>
-                  </div>
+                  </fieldset>
 
                   <div className="space-y-1.5">
                     <label htmlFor="details" className="text-sm font-semibold text-slate-800">

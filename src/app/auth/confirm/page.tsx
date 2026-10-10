@@ -1,10 +1,35 @@
 'use client';
 
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import type { EmailOtpType } from '@supabase/supabase-js';
+
+// verifyOtp に渡せる type のみ許可する
+const ALLOWED_OTP_TYPES: readonly EmailOtpType[] = [
+  'email',
+  'magiclink',
+  'recovery',
+  'signup',
+  'invite',
+  'email_change',
+];
+
+function parseOtpType(value: string | null): EmailOtpType | null {
+  if (!value) return null;
+  return (ALLOWED_OTP_TYPES as readonly string[]).includes(value) ? (value as EmailOtpType) : null;
+}
+
+// オープンリダイレクト対策: サイト内の相対パスのみ許可し、それ以外はトップページへ
+function sanitizeNext(value: string | null): string {
+  if (!value) return '/';
+  if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {
+    return '/';
+  }
+  return value;
+}
 
 function ConfirmContent() {
   const searchParams = useSearchParams();
@@ -13,15 +38,11 @@ function ConfirmContent() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const token_hash = searchParams.get('token_hash');
-  const type = searchParams.get('type') as any;
-  const next = searchParams.get('next') ?? '/upload';
+  const type = parseOtpType(searchParams.get('type'));
+  const next = sanitizeNext(searchParams.get('next'));
 
-  useEffect(() => {
-    if (!token_hash || !type) {
-      setErrorMessage('無効なリンクです。ログインページからやり直してください。');
-      setStatus('error');
-    }
-  }, [token_hash, type]);
+  // token_hash / type が不正なリンクはその場でエラー表示する
+  const isInvalidLink = !token_hash || !type;
 
   const handleConfirm = async () => {
     if (!token_hash || !type) return;
@@ -40,18 +61,18 @@ function ConfirmContent() {
       setStatus('error');
     } else {
       if (next.includes('/auth/callback')) {
-        router.push('/upload');
+        router.push('/');
       } else {
         router.push(next);
       }
     }
   };
 
-  if (status === 'error') {
+  if (isInvalidLink || status === 'error') {
     return (
       <div className="text-center space-y-4">
         <div className="text-red-600 bg-red-50 p-3 rounded-md border border-red-100 text-sm">
-          {errorMessage}
+          {isInvalidLink ? '無効なリンクです。ログインページからやり直してください。' : errorMessage}
         </div>
         <Button onClick={() => router.push('/login')} variant="outline" className="w-full">
           ログイン画面へ戻る

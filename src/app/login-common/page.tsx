@@ -3,12 +3,20 @@ import { redirect } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { SubmitButton } from './submit-button';
+import { getSitePassword } from '@/lib/site-password';
 
-export default function LoginCommonPage() {
+export default async function LoginCommonPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { error } = await searchParams;
+  const hasError = error !== undefined;
+
   async function submitPassword(formData: FormData) {
     'use server';
     const password = formData.get('password') as string;
-    const expectedPassword = process.env.SITE_COMMON_PASSWORD || 'your_common_password_here';
+    const expectedPassword = getSitePassword();
 
     if (password === expectedPassword) {
       const cookieStore = await cookies();
@@ -20,6 +28,9 @@ export default function LoginCommonPage() {
       });
       redirect('/');
     }
+
+    // パスワードが誤っている場合はエラー表示付きでログイン画面に戻す
+    redirect('/login-common?error=1');
   }
 
   return (
@@ -31,6 +42,11 @@ export default function LoginCommonPage() {
         </CardHeader>
         <CardContent>
           <form action={submitPassword} className="space-y-4">
+            {hasError && (
+              <div className="text-red-600 bg-red-50 p-3 rounded-md border border-red-100 text-sm">
+                パスワードが正しくありません。もう一度入力してください。
+              </div>
+            )}
             <div className="space-y-2">
               <Input
                 type="password"

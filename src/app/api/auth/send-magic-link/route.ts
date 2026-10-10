@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
+import { isUniversityEmail } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
     const { email } = await request.json();
 
-    // *.ac.jp の学内メールアドレスかを正規表現でチェック
-    // 末尾がアットマーク以降で ac.jp で終わることを確認（例: s123456@edu.nagasaki-u.ac.jp など）
-    const emailRegex = /^[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.)?ac\.jp$/;
-    if (!email || !emailRegex.test(email)) {
+    // *.ac.jp の学内メールアドレスかをチェック（判定ロジックは @/lib/auth に集約）
+    if (!email || typeof email !== 'string' || !isUniversityEmail(email)) {
       return NextResponse.json(
         { error: '大学のメールアドレス (*.ac.jp) を使用してください。個人のアドレスは許可されていません。' },
         { status: 400 }

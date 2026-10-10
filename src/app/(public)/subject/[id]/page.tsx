@@ -1,10 +1,37 @@
 import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { isAdminEmail, isUniversityEmail } from '@/lib/auth';
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { ExamList } from '@/components/ExamList';
 
 type Props = {
   params: Promise<{ id: string }>
+}
+
+const dateFormatter = new Intl.DateTimeFormat('ja-JP', {
+  timeZone: 'Asia/Tokyo',
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+});
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const subject = await prisma.subject.findUnique({
+    where: { id },
+    select: { name: true, faculty: { select: { name: true } } },
+  });
+
+  if (!subject) {
+    return { title: '科目が見つかりません | 長大過去問ハブ' };
+  }
+
+  return {
+    title: `${subject.name} の過去問 | 長大過去問ハブ`,
+    description: `長崎大学 ${subject.faculty.name} の科目「${subject.name}」の過去問を閲覧・ダウンロードできます。`,
+  };
 }
 
 export default async function SubjectPage({ params }: Props) {
@@ -20,6 +47,16 @@ export default async function SubjectPage({ params }: Props) {
     console.error('Failed to retrieve user session:', e);
   }
 
+  // 非公開の過去問は、アップロード者本人と管理者にのみ表示する
+  const isAdmin = currentUserEmail !== null
+    && isUniversityEmail(currentUserEmail)
+    && isAdminEmail(currentUserEmail);
+  const visibilityFilter = isAdmin
+    ? {}
+    : currentUserEmail
+      ? { OR: [{ isHidden: false }, { uploadedBy: currentUserEmail }] }
+      : { isHidden: false };
+
   // 科目とその過去問を年度の降順で取得
   const subject = await prisma.subject.findUnique({
     where: { id },
@@ -30,6 +67,7 @@ export default async function SubjectPage({ params }: Props) {
         }
       },
       exams: {
+        where: visibilityFilter,
         include: {
           courses: true
         },
@@ -47,11 +85,10 @@ export default async function SubjectPage({ params }: Props) {
     id: exam.id,
     year: exam.year,
     instructor: exam.instructor,
-    fileUrl: exam.fileUrl,
     fileName: exam.fileName,
     comment: exam.comment,
-    uploadedBy: exam.uploadedBy,
-    createdAt: exam.createdAt.toISOString(),
+    isHidden: exam.isHidden,
+    createdAt: dateFormatter.format(exam.createdAt),
     courses: exam.courses.map(course => ({
       id: course.id,
       name: course.name,
@@ -81,11 +118,14 @@ export default async function SubjectPage({ params }: Props) {
       </div>
 
       <div className="space-y-4">
-        <ExamList 
-          subject={serializedSubject}
-          exams={serializedExams}
-          currentUserEmail={currentUserEmail}
-        />
+        {/* ExamList は useSearchParams（フィルタ・完了バナー）を使うため Suspense で囲む */}
+        <Suspense fallback={null}>
+          <ExamList
+            subject={serializedSubject}
+            exams={serializedExams}
+            currentUserEmail={currentUserEmail}
+          />
+        </Suspense>
       </div>
     </div>
   );

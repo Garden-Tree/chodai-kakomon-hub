@@ -2,9 +2,9 @@
 
 import { Suspense, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { BookOpen } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type { EmailOtpType } from '@supabase/supabase-js';
 
 // verifyOtp に渡せる type のみ許可する
@@ -46,10 +46,10 @@ function ConfirmContent() {
 
   const handleConfirm = async () => {
     if (!token_hash || !type) return;
-    
+
     setStatus('loading');
     const supabase = createClient();
-    
+
     const { error } = await supabase.auth.verifyOtp({
       token_hash,
       type,
@@ -71,10 +71,14 @@ function ConfirmContent() {
   if (isInvalidLink || status === 'error') {
     return (
       <div className="text-center space-y-4">
-        <div className="text-red-600 bg-red-50 p-3 rounded-md border border-red-100 text-sm">
+        <div role="alert" className="text-red-800 bg-red-50 p-3 rounded-xl border-2 border-red-700 text-sm">
           {isInvalidLink ? '無効なリンクです。ログインページからやり直してください。' : errorMessage}
         </div>
-        <Button onClick={() => router.push('/login')} variant="outline" className="w-full">
+        <Button
+          onClick={() => router.push('/login')}
+          variant="outline"
+          className="w-full bg-card border-2 border-ink rounded-xl min-h-11 font-bold cursor-pointer hover:bg-muted"
+        >
           ログイン画面へ戻る
         </Button>
       </div>
@@ -83,13 +87,13 @@ function ConfirmContent() {
 
   return (
     <div className="text-center space-y-4">
-      <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+      <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
         セキュリティシステム（大学のメールスキャナー等）によるリンクの自動消費を防ぐため、<br/>
         以下のボタンをクリックしてログインを完了してください。
       </p>
-      <Button 
-        onClick={handleConfirm} 
-        className="w-full font-bold" 
+      <Button
+        onClick={handleConfirm}
+        className="w-full bg-primary text-primary-foreground edge-pop border-2 border-ink rounded-xl min-h-12 font-bold cursor-pointer"
         size="lg"
         disabled={status === 'loading' || !token_hash || !type}
       >
@@ -101,20 +105,26 @@ function ConfirmContent() {
 
 export default function ConfirmPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <Card className="w-full max-w-md border-slate-200">
-        <CardHeader>
-          <CardTitle className="text-xl font-bold text-center">認証の確認</CardTitle>
-          <CardDescription className="text-center">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
+      <div className="card-pop w-full max-w-md p-6 md:p-8 space-y-5">
+        <div className="space-y-3 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <span className="flex size-9 items-center justify-center rounded-lg border-2 border-ink bg-highlight text-highlight-foreground">
+              <BookOpen className="size-5" aria-hidden="true" />
+            </span>
+            <span className="font-extrabold tracking-tight">過去問ハブ</span>
+          </div>
+          <h1 className="text-2xl font-extrabold tracking-tight">認証の確認</h1>
+          <p className="text-sm text-muted-foreground">
             ご本人確認を完了します
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<div className="text-center py-4 text-sm text-slate-500">読み込み中...</div>}>
+          </p>
+        </div>
+        <div>
+          <Suspense fallback={<div className="text-center py-4 text-sm text-muted-foreground">読み込み中...</div>}>
             <ConfirmContent />
           </Suspense>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { BookOpen } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { SubmitButton } from './submit-button';
 import { getSitePassword } from '@/lib/site-password';
 
@@ -34,31 +34,36 @@ export default async function LoginCommonPage({
   }
 
   return (
-    <div className="flex h-screen items-center justify-center bg-gray-50">
-      <Card className="w-[400px]">
-        <CardHeader>
-          <CardTitle className="text-xl font-bold">過去問共有サイト</CardTitle>
-          <CardDescription>学内共通の簡易パスワードを入力してください。</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form action={submitPassword} className="space-y-4">
-            {hasError && (
-              <div className="text-red-600 bg-red-50 p-3 rounded-md border border-red-100 text-sm">
-                パスワードが正しくありません。もう一度入力してください。
-              </div>
-            )}
-            <div className="space-y-2">
-              <Input
-                type="password"
-                name="password"
-                placeholder="パスワード"
-                required
-              />
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
+      <div className="card-pop w-full max-w-md p-6 md:p-8 space-y-5">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="flex size-9 items-center justify-center rounded-lg border-2 border-ink bg-highlight text-highlight-foreground">
+              <BookOpen className="size-5" aria-hidden="true" />
+            </span>
+            <span className="font-extrabold tracking-tight">過去問ハブ</span>
+          </div>
+          <h1 className="text-2xl font-extrabold tracking-tight">過去問共有サイト</h1>
+          <p className="text-sm text-muted-foreground">学内共通の簡易パスワードを入力してください。</p>
+        </div>
+        <form action={submitPassword} className="space-y-4">
+          {hasError && (
+            <div className="text-red-800 bg-red-50 p-3 rounded-xl border-2 border-red-700 text-sm">
+              パスワードが正しくありません。もう一度入力してください。
             </div>
-            <SubmitButton />
-          </form>
-        </CardContent>
-      </Card>
+          )}
+          <div className="space-y-2">
+            <Input
+              type="password"
+              name="password"
+              placeholder="パスワード"
+              required
+              className="bg-card border-2 border-ink/80 rounded-xl min-h-11 focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+          <SubmitButton />
+        </form>
+      </div>
     </div>
   );
 }

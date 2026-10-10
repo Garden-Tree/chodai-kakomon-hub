@@ -10,6 +10,13 @@ import type { ActionResult } from '@/lib/action-result';
 // 通信エラーなど、Server Action が結果を返せなかった場合のメッセージ
 const NETWORK_ERROR_MESSAGE = '操作に失敗しました。時間をおいて再試行してください。';
 
+// B案のボタン・入力欄スタイル（主要ボタンは各入力欄の確定ボタンだけ）
+const OUTLINE_BUTTON_CLASS = 'bg-card border-2 border-ink rounded-xl min-h-11 px-4 text-sm font-bold cursor-pointer hover:bg-muted';
+const DANGER_BUTTON_CLASS =
+  'bg-card border-2 border-red-700 text-red-700 hover:bg-red-50 hover:text-red-800 rounded-xl min-h-11 px-4 text-sm font-bold cursor-pointer';
+const PRIMARY_BUTTON_CLASS =
+  'bg-primary text-primary-foreground edge-pop border-2 border-ink rounded-xl min-h-11 px-4 text-sm font-bold cursor-pointer';
+
 export type SubjectOption = { id: string; name: string; examCount: number };
 export type CourseOption = { id: string; name: string };
 
@@ -116,17 +123,17 @@ export function SubjectActions({ subject, facultySubjects, facultyCourses, sugge
   return (
     <div className="flex flex-col gap-2 items-start sm:items-end">
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" disabled={isPending || mode === 'rename'} onClick={() => openMode('rename')} className="cursor-pointer">
+        <Button variant="outline" disabled={isPending || mode === 'rename'} onClick={() => openMode('rename')} className={OUTLINE_BUTTON_CLASS}>
           名前を変更
         </Button>
-        <Button variant="outline" size="sm" disabled={isPending || mode === 'merge' || targets.length === 0} onClick={() => openMode('merge')} className="cursor-pointer">
+        <Button variant="outline" disabled={isPending || mode === 'merge' || targets.length === 0} onClick={() => openMode('merge')} className={OUTLINE_BUTTON_CLASS}>
           統合
         </Button>
-        <Button variant="outline" size="sm" disabled={isPending || mode === 'courses' || facultyCourses.length === 0} onClick={() => openMode('courses')} className="cursor-pointer">
+        <Button variant="outline" disabled={isPending || mode === 'courses' || facultyCourses.length === 0} onClick={() => openMode('courses')} className={OUTLINE_BUTTON_CLASS}>
           コースを編集
         </Button>
         {subject.examCount === 0 && (
-          <Button variant="destructive" size="sm" disabled={isPending} onClick={handleDelete} className="cursor-pointer">
+          <Button variant="outline" disabled={isPending} onClick={handleDelete} className={DANGER_BUTTON_CLASS}>
             削除
           </Button>
         )}
@@ -140,13 +147,13 @@ export function SubjectActions({ subject, facultySubjects, facultyCourses, sugge
             maxLength={100}
             aria-label="新しい科目名"
             autoFocus
-            className="w-full text-sm"
+            className="w-full text-sm bg-card border-2 border-ink/80 rounded-xl min-h-11 focus-visible:ring-2 focus-visible:ring-ring"
           />
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" disabled={isPending} onClick={() => setMode('idle')} className="cursor-pointer">
+            <Button variant="outline" disabled={isPending} onClick={() => setMode('idle')} className={OUTLINE_BUTTON_CLASS}>
               キャンセル
             </Button>
-            <Button size="sm" disabled={isPending || name.trim() === ''} onClick={handleRename} className="cursor-pointer">
+            <Button disabled={isPending || name.trim() === ''} onClick={handleRename} className={PRIMARY_BUTTON_CLASS}>
               保存
             </Button>
           </div>
@@ -155,12 +162,12 @@ export function SubjectActions({ subject, facultySubjects, facultyCourses, sugge
 
       {mode === 'merge' && (
         <div className="flex w-full flex-col gap-2 sm:w-80">
-          <p className="text-xs text-slate-500">この科目の過去問を、選択した科目に移動して、この科目を削除します。</p>
+          <p className="text-xs text-muted-foreground">この科目の過去問を、選択した科目に移動して、この科目を削除します。</p>
           <select
             value={targetId}
             onChange={(e) => setTargetId(e.target.value)}
             aria-label="統合先の科目"
-            className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="min-h-11 w-full rounded-xl border-2 border-ink/80 bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="">統合先を選択...</option>
             {targets.map(s => (
@@ -170,10 +177,10 @@ export function SubjectActions({ subject, facultySubjects, facultyCourses, sugge
             ))}
           </select>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" disabled={isPending} onClick={() => setMode('idle')} className="cursor-pointer">
+            <Button variant="outline" disabled={isPending} onClick={() => setMode('idle')} className={OUTLINE_BUTTON_CLASS}>
               キャンセル
             </Button>
-            <Button size="sm" disabled={isPending || targetId === ''} onClick={handleMerge} className="cursor-pointer">
+            <Button disabled={isPending || targetId === ''} onClick={handleMerge} className={PRIMARY_BUTTON_CLASS}>
               統合する
             </Button>
           </div>
@@ -182,33 +189,33 @@ export function SubjectActions({ subject, facultySubjects, facultyCourses, sugge
 
       {mode === 'courses' && (
         <div className="flex w-full flex-col gap-2 sm:w-80">
-          <div className="flex flex-col gap-1.5 rounded-md border border-slate-200 bg-slate-50 p-2">
+          <div className="flex flex-col gap-0.5 rounded-xl border border-border bg-card p-2">
             {facultyCourses.map(course => (
-              <label key={course.id} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+              <label key={course.id} className="flex items-center gap-3 min-h-11 px-1 text-sm cursor-pointer">
                 <input
                   type="checkbox"
                   checked={courseIds.includes(course.id)}
                   onChange={(e) => toggleCourse(course.id, e.target.checked)}
-                  className="size-4 cursor-pointer"
+                  className="size-5 accent-primary cursor-pointer"
                 />
                 {course.name}
               </label>
             ))}
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" disabled={isPending} onClick={() => setMode('idle')} className="cursor-pointer">
+            <Button variant="outline" disabled={isPending} onClick={() => setMode('idle')} className={OUTLINE_BUTTON_CLASS}>
               キャンセル
             </Button>
-            <Button size="sm" disabled={isPending} onClick={handleSaveCourses} className="cursor-pointer">
+            <Button disabled={isPending} onClick={handleSaveCourses} className={PRIMARY_BUTTON_CLASS}>
               保存
             </Button>
           </div>
         </div>
       )}
 
-      {isPending && <p className="text-xs text-slate-500">処理中...</p>}
-      {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
-      {success && !error && <p role="status" className="text-xs text-emerald-600">{success}</p>}
+      {isPending && <p className="text-xs text-muted-foreground">処理中...</p>}
+      {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+      {success && !error && <p role="status" className="text-xs text-emerald-700">{success}</p>}
     </div>
   );
 }

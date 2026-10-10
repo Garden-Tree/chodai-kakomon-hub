@@ -51,7 +51,12 @@ async function BrowseSections({ facultyParam }: { facultyParam: string }) {
       },
     }),
     prisma.faculty.findMany({
-      select: { id: true, name: true, _count: { select: { subjects: true } } },
+      // 公開中の過去問が1件以上ある科目の数（タイルの数字と「まだ過去問がない学部」の判定に使う）
+      select: {
+        id: true,
+        name: true,
+        _count: { select: { subjects: { where: { exams: { some: { isHidden: false } } } } } },
+      },
       orderBy: { createdAt: 'asc' },
     }),
     facultyParam

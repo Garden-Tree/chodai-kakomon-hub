@@ -7,6 +7,7 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { STORAGE_BUCKET, removeExamFileIfUnreferenced } from '@/lib/exam-storage';
 import { ActionError, fail, ok, parseInput, runAction, type ActionResult } from '@/lib/action-result';
 import { z } from 'zod';
+import { normalizeInstructor } from '@/lib/normalize-instructor';
 
 // クライアント（UploadForm）がアップロードする Storage 上のパス形式: `<科目UUID>/<ランダムUUID>.pdf`
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
@@ -120,6 +121,11 @@ export async function saveExamData(
     const validated = parseInput(getFormSchema(), data, FIELD_LABELS);
     const courseIds = Array.from(new Set(validated.courseIds || []));
     const newSubjectName = validated.newSubjectName || undefined; // trim後の空文字は未入力扱い
+    // 全角・半角スペースの違いによる表記ゆれを防ぐため、担当教員名は正規化して保存する
+    const instructor = normalizeInstructor(validated.instructor);
+    if (!instructor) {
+      return fail('担当教員を入力してください。');
+    }
 
     // 学部の存在確認
     const faculty = await prisma.faculty.findUnique({
@@ -213,7 +219,7 @@ export async function saveExamData(
       data: {
         subjectId: finalSubjectId,
         year: validated.year,
-        instructor: validated.instructor,
+        instructor,
         fileUrl: validated.fileUrl,
         fileName: validated.fileName,
         comment: validated.comment || null,
@@ -235,6 +241,10 @@ export async function updateExamData(data: UpdateExamInput): Promise<ActionResul
 
     const validated = parseInput(getEditFormSchema(), data, FIELD_LABELS);
     const courseIds = Array.from(new Set(validated.courseIds || []));
+    const instructor = normalizeInstructor(validated.instructor);
+    if (!instructor) {
+      return fail('担当教員を入力してください。');
+    }
 
     // 過去問がユーザー自身のものであるか確認
     const existingExam = await prisma.exam.findUnique({
@@ -258,7 +268,7 @@ export async function updateExamData(data: UpdateExamInput): Promise<ActionResul
       where: { id: validated.examId },
       data: {
         year: validated.year,
-        instructor: validated.instructor,
+        instructor,
         comment: validated.comment || null,
         courses: {
           set: courseIds.map(id => ({ id }))

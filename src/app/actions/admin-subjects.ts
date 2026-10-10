@@ -7,8 +7,11 @@ import { requireAdminUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { fail, ok, parseInput, runAction, type ActionResult } from '@/lib/action-result';
 
-const subjectIdSchema = z.string().uuid('有効な科目IDを指定してください。');
-const courseIdsSchema = z.array(z.string().uuid('有効なコースIDを指定してください。')).max(200);
+// ID は UUID に限らない（手動で登録された ID も許容する）。存在確認は各アクション側で行う
+const subjectIdSchema = z.string().min(1, '有効な科目IDを指定してください。').max(100, '有効な科目IDを指定してください。');
+const courseIdsSchema = z
+  .array(z.string().min(1, '有効なコースIDを指定してください。').max(100, '有効なコースIDを指定してください。'))
+  .max(200);
 const subjectNameSchema = z
   .string()
   .trim()

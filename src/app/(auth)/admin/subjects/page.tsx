@@ -20,7 +20,8 @@ export default async function AdminSubjectsPage({ searchParams }: Props) {
 
   const sp = await searchParams;
   const query = typeof sp.q === 'string' ? sp.q.trim() : '';
-  const normalizedQuery = normalizeSubjectName(query);
+  // 検索語には末尾ローマ数字の変換（x→10 など）をかけない: NFKC + 小文字化 + 空白除去のみ
+  const looseQuery = query.normalize('NFKC').toLowerCase().replace(/s+/g, '');
 
   // トップページと同じ並び順（作成日の古い順）で学部を取得する
   const faculties = await prisma.faculty.findMany({
@@ -58,8 +59,13 @@ export default async function AdminSubjectsPage({ searchParams }: Props) {
     }
     const duplicateGroups = Array.from(byKey.values()).filter(group => group.length >= 2);
 
-    const visibleSubjects = normalizedQuery
-      ? subjects.filter(s => normalizeSubjectName(s.name).includes(normalizedQuery))
+    // 正規化した科目名、または NFKC・小文字化・空白除去のみの科目名のどちらかに検索語が含まれれば一致とする
+    const visibleSubjects = looseQuery
+      ? subjects.filter(
+          s =>
+            normalizeSubjectName(s.name).includes(looseQuery) ||
+            s.name.normalize('NFKC').toLowerCase().replace(/s+/g, '').includes(looseQuery),
+        )
       : subjects;
 
     return { id: faculty.id, name: faculty.name, courses, options, duplicateGroups, visibleSubjects };

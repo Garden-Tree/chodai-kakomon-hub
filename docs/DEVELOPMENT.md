@@ -79,6 +79,7 @@ src/
 | `SUPABASE_SERVICE_ROLE_KEY` | **必須**。Supabaseのサービスロールキー（サーバー専用）。ダウンロード用Signed URLの発行、アップロード済みファイルの存在確認・削除に使用。RLSをバイパスできるため絶対に公開しないこと |
 | `SITE_COMMON_PASSWORD` | **必須**。サイト閲覧用の学内共通簡易パスワード。未設定、またはプレースホルダー値 `your_common_password_here` のままだとエラーになるため、推測されにくい値を設定すること |
 | `ADMIN_EMAILS` | 任意。管理者のメールアドレス（カンマ区切り、大文字小文字は区別しない）。該当ユーザーは `/admin/reports` で通報の確認、過去問の非公開化・公開復帰・削除ができる。未設定の場合は管理者なし |
+| `CRON_SECRET` | 任意（推奨）。`vercel.json` の Cron が毎日呼ぶ `/api/cron/keepalive`（Supabase 無料プランの自動停止を防ぐため DB と Storage に軽くアクセスする）の認証に使う。Vercel に設定すると `Authorization: Bearer <値>` 付きで呼ばれ、それ以外のリクエストは 401 になる |
 
 > [!CAUTION]
 > `.env.local` は `.gitignore` によって除外されており、絶対にコミットしないでください。

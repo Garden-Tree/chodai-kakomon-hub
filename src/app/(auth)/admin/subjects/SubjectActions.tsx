@@ -77,6 +77,16 @@ export function SubjectActions({ subject, facultySubjects, facultyCourses, sugge
     router.replace(`/admin/subjects?${params.toString()}`, { scroll: false });
   };
 
+  // 別の操作が成功したときは、前回の統合・削除の結果バナー（?done=...&moved=...）を URL から取り除く
+  const clearPageNotice = () => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('done') && !params.has('moved')) return;
+    params.delete('done');
+    params.delete('moved');
+    const qs = params.toString();
+    router.replace(qs ? `/admin/subjects?${qs}` : '/admin/subjects', { scroll: false });
+  };
+
   const openMode = (next: Mode) => {
     setError('');
     setSuccess('');
@@ -86,7 +96,14 @@ export function SubjectActions({ subject, facultySubjects, facultyCourses, sugge
   };
 
   const handleRename = () => {
-    run(() => renameSubject(subject.id, name), () => '名前を変更しました。', () => setMode('idle'));
+    run(
+      () => renameSubject(subject.id, name),
+      () => '名前を変更しました。',
+      () => {
+        setMode('idle');
+        clearPageNotice();
+      },
+    );
   };
 
   const handleMerge = () => {
@@ -108,7 +125,14 @@ export function SubjectActions({ subject, facultySubjects, facultyCourses, sugge
   };
 
   const handleSaveCourses = () => {
-    run(() => setSubjectCourses(subject.id, courseIds), () => 'コースを更新しました。', () => setMode('idle'));
+    run(
+      () => setSubjectCourses(subject.id, courseIds),
+      () => 'コースを更新しました。',
+      () => {
+        setMode('idle');
+        clearPageNotice();
+      },
+    );
   };
 
   const handleDelete = () => {

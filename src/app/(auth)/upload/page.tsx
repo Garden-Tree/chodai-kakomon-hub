@@ -18,7 +18,7 @@ export default async function UploadPage({ searchParams }: Props) {
 
   // 科目一覧を取得してフォームに渡す
   const subjects = await prisma.subject.findMany({
-    include: { faculty: true },
+    include: { faculty: true, courses: { select: { id: true } } },
     orderBy: [{ faculty: { name: 'asc' } }, { name: 'asc' }]
   });
 
@@ -37,6 +37,14 @@ export default async function UploadPage({ searchParams }: Props) {
   const subjectParam = typeof sp.subject === 'string' ? sp.subject : '';
   const initialSubjectId = subjects.some(s => s.id === subjectParam) ? subjectParam : undefined;
 
+  // フォームには必要な項目だけを渡す（科目の現在のコースはコースの初期選択に使う）
+  const subjectOptions = subjects.map(s => ({
+    id: s.id,
+    name: s.name,
+    facultyId: s.facultyId,
+    courseIds: s.courses.map(c => c.id),
+  }));
+
   return (
     <div className="w-full max-w-3xl mx-auto animate-in fade-in duration-500">
       <div className="mb-6 md:mb-8">
@@ -46,7 +54,8 @@ export default async function UploadPage({ searchParams }: Props) {
         </p>
       </div>
       <UploadForm
-        subjects={subjects}
+        key={initialSubjectId ?? 'none'}
+        subjects={subjectOptions}
         faculties={faculties}
         courses={courses}
         initialSubjectId={initialSubjectId}

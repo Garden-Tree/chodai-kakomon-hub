@@ -95,7 +95,7 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
   // 結果メッセージを3秒後に自動で消す
   useEffect(() => {
     if (!notice) return;
-    const timer = setTimeout(() => setNotice(null), 3000);
+    const timer = setTimeout(() => setNotice(null), 6000);
     return () => clearTimeout(timer);
   }, [notice]);
 
@@ -235,10 +235,11 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
             ログイン中アカウント: <span className="font-bold text-foreground break-all">{email}</span>
           </p>
         </div>
-        <Link href="/upload" className="shrink-0">
-          <Button className={`${PRIMARY_BUTTON_CLASS} w-full md:w-auto px-5`}>
-            過去問を新しくアップロード
-          </Button>
+        <Link
+          href="/upload"
+          className={`${PRIMARY_BUTTON_CLASS} inline-flex shrink-0 items-center justify-center px-5 text-sm w-full md:w-auto transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+        >
+          過去問を新しくアップロード
         </Link>
       </div>
 
@@ -248,7 +249,7 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
         {notice && (
           <div
             role={notice.type === 'error' ? 'alert' : 'status'}
-            className={`flex items-start gap-2 p-3 rounded-xl text-sm border-2 ${
+            className={`sticky top-20 z-20 flex items-start gap-2 p-3 rounded-xl text-sm border-2 ${
               notice.type === 'success'
                 ? 'bg-highlight text-highlight-foreground border-ink'
                 : 'bg-red-50 text-red-800 border-red-700'
@@ -259,7 +260,15 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
             ) : (
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             )}
-            <span>{notice.text}</span>
+            <span className="flex-1">{notice.text}</span>
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              aria-label="メッセージを閉じる"
+              className="shrink-0 rounded-md p-0.5 hover:bg-black/10 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
           </div>
         )}
 
@@ -270,8 +279,11 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
               <p className="font-bold">まだ過去問がアップロードされていません</p>
               <p className="text-sm text-muted-foreground">あなたがこれまでに共有した過去問がここに一覧表示されます。</p>
             </div>
-            <Link href="/upload" className="inline-block pt-2">
-              <Button variant="outline" className={`${OUTLINE_BUTTON_CLASS} px-5`}>過去問をアップロードする</Button>
+            <Link
+              href="/upload"
+              className={`${OUTLINE_BUTTON_CLASS} inline-flex items-center justify-center px-5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+            >
+              過去問をアップロードする
             </Link>
           </div>
         ) : (
@@ -398,8 +410,9 @@ export function MyPageClient({ exams, allCourses, email }: Props) {
             <button
               type="button"
               onClick={handleCancelEdit}
+              disabled={isUpdating}
               aria-label="閉じる"
-              className="absolute top-2 right-2 size-11 flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
+              className="absolute top-2 right-2 size-11 flex items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
             >
               <X className="w-5 h-5" />
             </button>

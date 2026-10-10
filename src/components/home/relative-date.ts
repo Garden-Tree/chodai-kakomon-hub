@@ -23,6 +23,7 @@ export function formatRelativeDate(date: Date, now: Date = new Date()): string {
   if (days === 1) return '昨日';
   if (days < 7) return `${days}日前`;
   if (days < 30) return `${Math.floor(days / 7)}週間前`;
-  if (days < 365) return `${Math.floor(days / 30)}か月前`;
-  return `${Math.floor(days / 365)}年前`;
+  // 360日目から「1年前」にする（「12か月前」にならないようにする）
+  if (days < 360) return `${Math.floor(days / 30)}か月前`;
+  return `${Math.max(1, Math.floor(days / 365))}年前`;
 }

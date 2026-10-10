@@ -4,6 +4,7 @@ import { ChevronDown, Upload } from 'lucide-react';
 export type FacultyTile = {
   id: string;
   name: string;
+  // 公開中の過去問が1件以上ある科目の数（0 の学部は「まだ過去問がない学部」にまとめる）
   subjectCount: number;
 };
 

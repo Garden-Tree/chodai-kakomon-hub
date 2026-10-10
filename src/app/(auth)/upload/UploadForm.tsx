@@ -162,7 +162,8 @@ const SELECT_CLASS =
 const getErrorMessage = (err: unknown): string => (err instanceof Error ? err.message : '');
 
 type Faculty = { id: string; name: string };
-type SubjectOption = { id: string; name: string; facultyId: string };
+// courseIds: 管理者が設定した、その科目の現在のコース（未設定なら空配列）
+type SubjectOption = { id: string; name: string; facultyId: string; courseIds: string[] };
 type CourseOption = { id: string; name: string; facultyId: string };
 
 export function UploadForm({
@@ -179,7 +180,17 @@ export function UploadForm({
 }) {
   const router = useRouter();
   const initialSubject = initialSubjectId ? subjects.find(s => s.id === initialSubjectId) : undefined;
-  
+
+  // 科目を選んだときのコースの初期選択。既存科目はその科目の現在のコース（管理者の編集を上書きしないため）、
+  // コース未設定の科目・新規科目・未選択のときは学部の全コースにする
+  const getDefaultCourseIds = (facultyId: string, subjectId: string): string[] => {
+    const facultyCourseIds = courses.filter(c => c.facultyId === facultyId).map(c => c.id);
+    const subject = subjects.find(s => s.id === subjectId);
+    if (!subject) return facultyCourseIds;
+    const subjectCourseIds = subject.courseIds.filter(id => facultyCourseIds.includes(id));
+    return subjectCourseIds.length > 0 ? subjectCourseIds : facultyCourseIds;
+  };
+
   // ファイルアップロード関連状態
   const [uploadMode, setUploadMode] = useState<'pdf' | 'images'>('pdf');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -197,7 +208,7 @@ export function UploadForm({
       subjectId: initialSubject?.id ?? '',
       comment: '',
       courseIds: initialSubject
-        ? courses.filter(c => c.facultyId === initialSubject.facultyId).map(c => c.id)
+        ? getDefaultCourseIds(initialSubject.facultyId, initialSubject.id)
         : [],
       agreeTerms: false,
     }
@@ -217,6 +228,16 @@ export function UploadForm({
     const courseIdsOfFaculty = courses.filter(c => c.facultyId === facultyIdValue).map(c => c.id);
     setValue('courseIds', courseIdsOfFaculty);
   }, [facultyIdValue, setValue, courses]);
+
+  // 既存の科目が選択されたら、コースの初期選択をその科目の現在のコースに合わせる
+  // （「新しい科目」や未選択のときは学部の全コースのまま。初回レンダリング時は事前選択の値を維持する）
+  const processedSubjectRef = useRef(subjectIdValue);
+  useEffect(() => {
+    if (processedSubjectRef.current === subjectIdValue) return;
+    processedSubjectRef.current = subjectIdValue;
+    setValue('courseIds', getDefaultCourseIds(facultyIdValue, subjectIdValue));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjectIdValue]);
 
   // 画像プレビュー用URLのクリーンアップ（アンマウント時に残っているURLのみ解放）
   const imageFilesRef = useRef(imageFiles);

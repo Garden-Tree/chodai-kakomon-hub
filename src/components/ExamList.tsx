@@ -2,11 +2,12 @@
 
 import { useEffect, useId, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Download, Eye, EyeOff, Flag, AlertTriangle, CheckCircle, X, Loader2, ArrowUpDown, ChevronDown, Upload } from 'lucide-react';
 import { createReport } from '@/app/actions/report';
+import { normalizeInstructor } from '@/lib/normalize-instructor';
 
 type Course = {
   id: string;
@@ -78,16 +79,17 @@ const courseBadgeClassName =
   'inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-bold text-secondary-foreground';
 
 export function ExamList({ subject, exams, currentUserEmail }: Props) {
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const yearGroupLabelId = useId();
   const courseGroupLabelId = useId();
   const instructorSelectId = useId();
 
   // URL クエリを更新する（null / 空文字を渡したパラメータは削除する）
+  // フィルタはクライアント側だけで完結するため、サーバー往復を伴う router.replace ではなく
+  // History API の replaceState を使う（Next.js が useSearchParams と同期する）。
+  // 連続タップでも古い値から組み立てないよう、現在の URL（window.location）を基準にする。
   const updateParams = (updates: Record<string, string | null>) => {
-    const next = new URLSearchParams(searchParams.toString());
+    const next = new URLSearchParams(window.location.search);
     for (const [key, value] of Object.entries(updates)) {
       if (value) {
         next.set(key, value);
@@ -96,7 +98,8 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
       }
     }
     const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    const { pathname, hash } = window.location;
+    window.history.replaceState(null, '', `${pathname}${qs ? `?${qs}` : ''}${hash}`);
   };
 
   // フィルタ候補（実際に存在する値のみ）
@@ -104,10 +107,16 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
     () => Array.from(new Set(exams.map(e => e.year))).sort((a, b) => b - a),
     [exams],
   );
-  const instructorOptions = useMemo(
-    () => Array.from(new Set(exams.map(e => e.instructor))).sort((a, b) => a.localeCompare(b, 'ja')),
-    [exams],
-  );
+  // 全角・半角スペースの違いだけの担当教員名は同一人物として1つにまとめる（表示は最初に見つかった表記）
+  const instructorOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const e of exams) {
+      const key = normalizeInstructor(e.instructor);
+      if (!byKey.has(key)) byKey.set(key, e.instructor.trim());
+    }
+    return Array.from(byKey, ([key, label]) => ({ key, label }))
+      .sort((a, b) => a.key.localeCompare(b.key, 'ja'));
+  }, [exams]);
   // この科目の過去問に1件でも紐づいているコースのみを、学部のコース順で並べる
   const courseOptions = useMemo(() => {
     const usedCourseIds = new Set(exams.flatMap(e => e.courses.map(c => c.id)));
@@ -121,7 +130,9 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
   const rawInstructor = searchParams.get(PARAM_INSTRUCTOR) ?? '';
   const rawCourse = searchParams.get(PARAM_COURSE) ?? '';
   const yearFilter = yearOptions.some(y => String(y) === rawYear) ? rawYear : '';
-  const instructorFilter = instructorOptions.includes(rawInstructor) ? rawInstructor : '';
+  // 旧形式（正規化前の値）の URL も受け付けるため、読み取り時に正規化する
+  const normalizedRawInstructor = normalizeInstructor(rawInstructor);
+  const instructorFilter = instructorOptions.some(o => o.key === normalizedRawInstructor) ? normalizedRawInstructor : '';
   const courseFilter = courseOptions.some(c => c.id === rawCourse) ? rawCourse : '';
   const sortAsc = searchParams.get(PARAM_SORT) === 'asc';
 
@@ -131,7 +142,7 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
     if (!showFilters) return exams;
     const filtered = exams.filter(e =>
       (!yearFilter || String(e.year) === yearFilter) &&
-      (!instructorFilter || e.instructor === instructorFilter) &&
+      (!instructorFilter || normalizeInstructor(e.instructor) === instructorFilter) &&
       (!courseFilter || e.courses.some(c => c.id === courseFilter)),
     );
     // sort は安定ソートなので、同じ年度内ではサーバー側の並びが保たれる
@@ -306,8 +317,8 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
                   className={selectClassName}
                 >
                   <option value="">すべて</option>
-                  {instructorOptions.map(name => (
-                    <option key={name} value={name}>{name}</option>
+                  {instructorOptions.map(option => (
+                    <option key={option.key} value={option.key}>{option.label}</option>
                   ))}
                 </select>
                 <ChevronDown
@@ -427,7 +438,7 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
                 <button
                   type="button"
                   onClick={() => handleReportClick(exam)}
-                  aria-label="不適切なコンテンツを通報"
+                  aria-label={`${exam.year}年度 ${exam.instructor} の過去問を通報`}
                   className="inline-flex min-h-8 items-center gap-1 self-end rounded px-1 text-xs font-medium text-muted-foreground hover:text-destructive transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   <Flag className="w-3.5 h-3.5" aria-hidden="true" />
@@ -457,8 +468,9 @@ export function ExamList({ subject, exams, currentUserEmail }: Props) {
               <button
                 type="button"
                 onClick={closeModal}
+                disabled={isSubmitting}
                 aria-label="閉じる"
-                className="inline-flex size-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer rounded-lg hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="inline-flex size-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer rounded-lg hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 disabled:pointer-events-none"
               >
                 <X className="w-5 h-5" aria-hidden="true" />
               </button>

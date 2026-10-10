@@ -5,6 +5,8 @@ import { isAdminEmail, isUniversityEmail } from '@/lib/auth';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { ExamList } from '@/components/ExamList';
+import Link from 'next/link';
+import { ChevronLeft, Upload } from 'lucide-react';
 
 type Props = {
   params: Promise<{ id: string }>
@@ -112,9 +114,30 @@ export default async function SubjectPage({ params }: Props) {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-        <div className="text-sm text-slate-500 mb-2">{subject.faculty.name}</div>
-        <h1 className="text-3xl font-bold text-slate-900">{subject.name}</h1>
+      <div className="rounded-2xl border border-border bg-card p-4 md:p-6">
+        <Link
+          href={`/?faculty=${encodeURIComponent(subject.faculty.id)}#faculty`}
+          className="-ml-1 inline-flex min-h-8 items-center gap-0.5 rounded-md px-1 text-sm font-bold text-primary hover:underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <ChevronLeft className="size-4 shrink-0" aria-hidden="true" />
+          {subject.faculty.name}
+        </Link>
+        <h1 className="mt-1 break-words text-2xl font-extrabold tracking-tight text-foreground md:text-3xl">
+          {subject.name}
+        </h1>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="inline-flex min-h-8 items-center rounded-full border-2 border-ink bg-highlight px-3 text-sm font-bold text-highlight-foreground">
+            過去問 {subject.exams.length}件
+          </span>
+          <Link
+            href={`/upload?subject=${encodeURIComponent(subject.id)}`}
+            className="inline-flex min-h-10 items-center gap-2 rounded-xl border-2 border-ink bg-card px-3 sm:px-4 text-sm font-bold text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <Upload className="size-4 shrink-0" aria-hidden="true" />
+            <span aria-hidden="true" className="sm:hidden">アップロード</span>
+            <span className="sr-only sm:not-sr-only">この科目の過去問をアップロード</span>
+          </Link>
+        </div>
       </div>
 
       <div className="space-y-4">

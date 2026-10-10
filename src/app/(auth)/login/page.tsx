@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { BookOpen } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -54,18 +54,24 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
-      <Card className="w-full max-w-md border-slate-200">
-        <CardHeader>
-          <CardTitle className="text-xl font-bold">アップロード用ログイン</CardTitle>
-          <CardDescription>
+    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center px-4 py-8 bg-background">
+      <div className="card-pop w-full max-w-md p-6 md:p-8 space-y-5">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="flex size-9 items-center justify-center rounded-lg border-2 border-ink bg-highlight text-highlight-foreground">
+              <BookOpen className="size-5" aria-hidden="true" />
+            </span>
+            <span className="font-extrabold tracking-tight">過去問ハブ</span>
+          </div>
+          <h1 className="text-2xl font-extrabold tracking-tight">アップロード用ログイン</h1>
+          <p className="text-sm text-muted-foreground leading-relaxed">
             過去問をアップロードするには、大学のメールアドレス (*.ac.jp) でログインしてください。パスワードは不要です。
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          </p>
+        </div>
+        <div>
           {status === 'success' ? (
-            <div className="bg-emerald-50 text-emerald-800 p-4 rounded-md border border-emerald-100">
-              <p className="font-medium">メールを送信しました！</p>
+            <div className="bg-highlight text-highlight-foreground p-4 rounded-xl border-2 border-ink">
+              <p className="font-bold">メールを送信しました！</p>
               <p className="text-sm mt-2 leading-relaxed">
                 受信トレイをご確認いただき、記載されたリンクをクリックしてログインを完了してください。<br/>
                 ※メールが届かない場合は迷惑メールフォルダもご確認ください。
@@ -80,24 +86,28 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={status === 'loading'}
-                  className="w-full"
+                  className="w-full bg-card border-2 border-ink/80 rounded-xl min-h-11 focus-visible:ring-2 focus-visible:ring-ring"
                   required
                 />
               </div>
 
               {status === 'error' && (
-                <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md border border-red-100">
+                <div role="alert" className="text-red-800 text-sm bg-red-50 p-3 rounded-xl border-2 border-red-700">
                   {errorMessage}
                 </div>
               )}
 
-              <Button type="submit" className="w-full" disabled={status === 'loading'}>
+              <Button
+                type="submit"
+                className="w-full bg-primary text-primary-foreground edge-pop border-2 border-ink rounded-xl min-h-11 font-bold cursor-pointer"
+                disabled={status === 'loading'}
+              >
                 {status === 'loading' ? '送信中...' : 'マジックリンクを送信'}
               </Button>
             </form>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

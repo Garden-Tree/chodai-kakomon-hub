@@ -9,6 +9,13 @@ import type { ActionResult } from '@/lib/action-result';
 // 通信エラーなど、Server Action が結果を返せなかった場合のメッセージ
 const NETWORK_ERROR_MESSAGE = '操作に失敗しました。時間をおいて再試行してください。';
 
+// B案のボタンスタイル（主要ボタンは入力欄を開いたときの「確定」だけ）
+const OUTLINE_BUTTON_CLASS = 'bg-card border-2 border-ink rounded-xl min-h-11 px-4 text-sm font-bold cursor-pointer hover:bg-muted';
+const DANGER_BUTTON_CLASS =
+  'bg-card border-2 border-red-700 text-red-700 hover:bg-red-50 hover:text-red-800 rounded-xl min-h-11 px-4 text-sm font-bold cursor-pointer';
+const PRIMARY_BUTTON_CLASS =
+  'bg-primary text-primary-foreground edge-pop border-2 border-ink rounded-xl min-h-11 px-4 text-sm font-bold cursor-pointer';
+
 // 過去問単位の操作（非公開・公開に戻す・削除）
 export function ExamActions({ examId, isHidden }: { examId: string; isHidden: boolean }) {
   const [isPending, startTransition] = useTransition();
@@ -57,21 +64,20 @@ export function ExamActions({ examId, isHidden }: { examId: string; isHidden: bo
     <div className="flex flex-col gap-2 items-start sm:items-end">
       <div className="flex flex-wrap gap-2">
         {isHidden ? (
-          <Button variant="outline" size="sm" disabled={isPending} onClick={() => run(() => unhideExam(examId), '公開に戻しました。')} className="cursor-pointer">
+          <Button variant="outline" disabled={isPending} onClick={() => run(() => unhideExam(examId), '公開に戻しました。')} className={OUTLINE_BUTTON_CLASS}>
             公開に戻す
           </Button>
         ) : (
           <Button
             variant="outline"
-            size="sm"
             disabled={isPending || isHiding}
             onClick={() => setIsHiding(true)}
-            className="cursor-pointer"
+            className={OUTLINE_BUTTON_CLASS}
           >
             非公開にする
           </Button>
         )}
-        <Button variant="destructive" size="sm" disabled={isPending} onClick={handleDelete} className="cursor-pointer">
+        <Button variant="outline" disabled={isPending} onClick={handleDelete} className={DANGER_BUTTON_CLASS}>
           過去問を削除
         </Button>
       </div>
@@ -85,24 +91,24 @@ export function ExamActions({ examId, isHidden }: { examId: string; isHidden: bo
             rows={3}
             aria-label="非公開の理由"
             autoFocus
-            className="w-full resize-none text-sm"
+            className="w-full resize-none text-sm bg-card border-2 border-ink/80 rounded-xl focus-visible:ring-2 focus-visible:ring-ring"
           />
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-slate-400">{reason.length}/200文字</span>
+            <span className="text-xs text-muted-foreground">{reason.length}/200文字</span>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={isPending} onClick={handleHideCancel} className="cursor-pointer">
+              <Button variant="outline" disabled={isPending} onClick={handleHideCancel} className={OUTLINE_BUTTON_CLASS}>
                 キャンセル
               </Button>
-              <Button size="sm" disabled={isPending} onClick={handleHideConfirm} className="cursor-pointer">
+              <Button disabled={isPending} onClick={handleHideConfirm} className={PRIMARY_BUTTON_CLASS}>
                 確定
               </Button>
             </div>
           </div>
         </div>
       )}
-      {isPending && <p className="text-xs text-slate-500">処理中...</p>}
-      {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
-      {success && !error && <p role="status" className="text-xs text-emerald-600">{success}</p>}
+      {isPending && <p className="text-xs text-muted-foreground">処理中...</p>}
+      {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+      {success && !error && <p role="status" className="text-xs text-emerald-700">{success}</p>}
     </div>
   );
 }
@@ -130,11 +136,11 @@ export function DismissReportButton({ reportId }: { reportId: string }) {
 
   return (
     <div className="flex flex-col gap-1 items-start sm:items-end shrink-0">
-      <Button variant="outline" size="xs" disabled={isPending} onClick={handleDismiss} className="cursor-pointer">
+      <Button variant="outline" disabled={isPending} onClick={handleDismiss} className={OUTLINE_BUTTON_CLASS}>
         {isPending ? '処理中...' : '却下'}
       </Button>
-      {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
-      {success && !error && <p role="status" className="text-xs text-emerald-600">{success}</p>}
+      {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+      {success && !error && <p role="status" className="text-xs text-emerald-700">{success}</p>}
     </div>
   );
 }

@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { SubjectRow } from '@/components/home/SubjectRow';
 
 type Course = {
   id: string;
@@ -12,6 +11,7 @@ type Course = {
 type Subject = {
   id: string;
   name: string;
+  examCount: number; // 公開中の過去問の件数
   courses: Course[];
 };
 
@@ -19,6 +19,11 @@ type Props = {
   subjects: Subject[];
   courses: Course[];
 };
+
+const pillBase =
+  'inline-flex min-h-10 items-center rounded-full border-2 border-ink px-3.5 text-sm font-bold transition-colors cursor-pointer select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const pillSelected = 'bg-ink text-white';
+const pillIdle = 'bg-card text-foreground hover:bg-muted';
 
 export function SubjectList({ subjects, courses }: Props) {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
@@ -35,34 +40,28 @@ export function SubjectList({ subjects, courses }: Props) {
     : subjects;
 
   return (
-    <div className="space-y-4 pt-2">
+    <div className="space-y-4">
       {/* コース選択のピル型フィルター（コースが存在する場合のみ表示） */}
       {courses.length > 0 && (
-        <div className="flex flex-wrap gap-2 pb-2 border-b border-slate-100">
+        <div className="flex flex-wrap gap-2">
           <button
+            type="button"
             onClick={() => setSelectedCourseId(null)}
             aria-pressed={selectedCourseId === null}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
-              selectedCourseId === null
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-            }`}
+            className={`${pillBase} ${selectedCourseId === null ? pillSelected : pillIdle}`}
           >
             すべて ({getSubjectCountForCourse(null)})
           </button>
-          
+
           {courses.map(course => {
             const count = getSubjectCountForCourse(course.id);
             return (
               <button
                 key={course.id}
+                type="button"
                 onClick={() => setSelectedCourseId(course.id)}
                 aria-pressed={selectedCourseId === course.id}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
-                  selectedCourseId === course.id
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                }`}
+                className={`${pillBase} ${selectedCourseId === course.id ? pillSelected : pillIdle}`}
               >
                 {course.name} ({count})
               </button>
@@ -71,25 +70,19 @@ export function SubjectList({ subjects, courses }: Props) {
         </div>
       )}
 
-      {/* 科目一覧グリッド */}
+      {/* 科目一覧 */}
       {filteredSubjects.length === 0 ? (
-        <p className="text-slate-500 text-sm py-8 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+        <p className="rounded-xl border-2 border-dashed border-ink/40 bg-secondary py-8 text-center text-base text-secondary-foreground">
           該当する科目がありません。
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
           {filteredSubjects.map(subject => (
-            <Link key={subject.id} href={`/subject/${subject.id}`}>
-              <Card className="hover:border-slate-800 hover:shadow-md transition-all cursor-pointer h-full border-slate-200 group bg-white">
-                <CardHeader className="py-4">
-                  <CardTitle className="text-base font-medium text-slate-800 group-hover:text-slate-900 transition-colors">
-                    {subject.name}
-                  </CardTitle>
-                </CardHeader>
-              </Card>
-            </Link>
+            <li key={subject.id}>
+              <SubjectRow id={subject.id} name={subject.name} examCount={subject.examCount} />
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

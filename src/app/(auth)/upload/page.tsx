@@ -3,7 +3,11 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { UploadForm } from './UploadForm';
 
-export default async function UploadPage() {
+type Props = {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}
+
+export default async function UploadPage({ searchParams }: Props) {
   // 認証チェック（大学のメールアドレスでログインしているユーザーのみ許可）
   const authUser = await getUniversityUser();
 
@@ -28,15 +32,25 @@ export default async function UploadPage() {
     orderBy: { name: 'asc' }
   });
 
+  // /upload?subject=<subjectId> で科目を事前選択する（存在しない ID は無視する）
+  const sp = await searchParams;
+  const subjectParam = typeof sp.subject === 'string' ? sp.subject : '';
+  const initialSubjectId = subjects.some(s => s.id === subjectParam) ? subjectParam : undefined;
+
   return (
     <div className="w-full max-w-3xl mx-auto animate-in fade-in duration-500">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">過去問のアップロード</h1>
-        <p className="text-slate-500 mt-2">
-          ログイン中: <span className="font-medium text-slate-700">{email}</span>
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">過去問のアップロード</h1>
+        <p className="text-muted-foreground mt-2 text-sm">
+          ログイン中: <span className="font-bold text-foreground break-all">{email}</span>
         </p>
       </div>
-      <UploadForm subjects={subjects} faculties={faculties} courses={courses} />
+      <UploadForm
+        subjects={subjects}
+        faculties={faculties}
+        courses={courses}
+        initialSubjectId={initialSubjectId}
+      />
     </div>
   );
 }
